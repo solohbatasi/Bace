@@ -3,53 +3,61 @@ import { ref, watchEffect } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 
 const page = usePage();
-const show = ref(true);
+const show = ref(false);
 const style = ref('success');
 const message = ref('');
+let timeoutId;
 
-watchEffect(async () => {
+watchEffect(() => {
     style.value = page.props.jetstream.flash?.bannerStyle || 'success';
     message.value = page.props.jetstream.flash?.banner || '';
-    show.value = true;
+
+    if (message.value) {
+        show.value = true;
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => (show.value = false), 4200);
+    }
 });
 </script>
 
 <template>
-    <div>
-        <div v-if="show && message" :class="{ 'bg-indigo-500': style == 'success', 'bg-red-700': style == 'danger' }">
-            <div class="max-w-screen-xl mx-auto py-2 px-3 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between flex-wrap">
-                    <div class="w-0 flex-1 flex items-center min-w-0">
-                        <span class="flex p-2 rounded-lg" :class="{ 'bg-indigo-600': style == 'success', 'bg-red-600': style == 'danger' }">
-                            <svg v-if="style == 'success'" class="size-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+    <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="translate-y-2 opacity-0"
+        enter-to-class="translate-y-0 opacity-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="translate-y-0 opacity-100"
+        leave-to-class="translate-y-2 opacity-0"
+    >
+        <div
+            v-if="show && message"
+            class="fixed right-5 top-5 z-50 w-[min(420px,calc(100vw-2.5rem))] rounded-md border bg-white p-4 shadow-2xl shadow-black/20 dark:bg-[#11141b]"
+            :class="style === 'danger' ? 'border-red-500/40 text-red-100' : 'border-violet-500/40 text-gray-100'"
+        >
+            <div class="flex items-start gap-3">
+                <span
+                    class="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md"
+                    :class="style === 'danger' ? 'bg-red-500/15 text-red-300' : 'bg-violet-500 text-white'"
+                >
+                    <svg v-if="style === 'danger'" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.3 4.3 2.8 17.2A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z" />
+                    </svg>
+                    <svg v-else class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m5 12 4 4L19 6" />
+                    </svg>
+                </span>
 
-                            <svg v-if="style == 'danger'" class="size-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                            </svg>
-                        </span>
-
-                        <p class="ms-3 font-medium text-sm text-white truncate">
-                            {{ message }}
-                        </p>
-                    </div>
-
-                    <div class="shrink-0 sm:ms-3">
-                        <button
-                            type="button"
-                            class="-me-1 flex p-2 rounded-md focus:outline-none sm:-me-2 transition"
-                            :class="{ 'hover:bg-indigo-600 focus:bg-indigo-600': style == 'success', 'hover:bg-red-600 focus:bg-red-600': style == 'danger' }"
-                            aria-label="Dismiss"
-                            @click.prevent="show = false"
-                        >
-                            <svg class="size-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ style === 'danger' ? 'Action failed' : 'Action completed' }}</p>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{{ message }}</p>
                 </div>
+
+                <button class="text-gray-400 transition hover:text-gray-200" type="button" @click="show = false">
+                    <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" d="m6 6 12 12M18 6 6 18" />
+                    </svg>
+                </button>
             </div>
         </div>
-    </div>
+    </Transition>
 </template>

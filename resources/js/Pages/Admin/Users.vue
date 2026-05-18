@@ -1,11 +1,13 @@
 <script setup>
-import { reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
 const props = defineProps({ users: Object, roles: Array, permissions: Array, filters: Object });
 
+const showingUserModal = ref(false);
 const filter = reactive({ search: props.filters.search || '', status: props.filters.status || '', role: props.filters.role || '' });
 const form = useForm({
     id: null,
@@ -19,9 +21,17 @@ const form = useForm({
     permission_ids: [],
 });
 
+const stats = computed(() => ({
+    total: props.users.total,
+    active: props.users.data.filter((user) => user.status === 'active').length,
+    suspended: props.users.data.filter((user) => user.status === 'suspended').length,
+    terminated: props.users.data.filter((user) => user.status === 'terminated').length,
+}));
+
 watch(filter, () => router.get(route('admin.users.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
 const resetForm = () => {
+    form.clearErrors();
     form.id = null;
     form.name = '';
     form.email = '';
@@ -32,119 +42,223 @@ const resetForm = () => {
     form.role_ids = [];
     form.permission_ids = [];
 };
+
+const openCreateModal = () => {
+    resetForm();
+    showingUserModal.value = true;
+};
+
 const edit = (user) => {
+    resetForm();
     form.id = user.id;
     form.name = user.name;
     form.email = user.email;
-    form.password = '';
     form.status = user.status;
     form.status_reason = user.status_reason || '';
     form.suspended_until = user.suspended_until || '';
     form.role_ids = user.roles.map((role) => role.id);
     form.permission_ids = user.permissions.map((permission) => permission.id);
+    showingUserModal.value = true;
 };
-const save = () => form.id
-    ? form.put(route('admin.users.update', form.id), { preserveScroll: true, onSuccess: resetForm })
-    : form.post(route('admin.users.store'), { preserveScroll: true, onSuccess: resetForm });
+
+const closeModal = () => {
+    showingUserModal.value = false;
+    resetForm();
+};
+
+const save = () => {
+    const options = {
+        preserveScroll: true,
+        onSuccess: closeModal,
+    };
+
+    form.id ? form.put(route('admin.users.update', form.id), options) : form.post(route('admin.users.store'), options);
+};
+
 const destroyUser = (user) => {
     if (confirm(`Delete ${user.name}?`)) router.delete(route('admin.users.destroy', user.id), { preserveScroll: true });
 };
+
 const postAction = (name, user) => router.post(route(`admin.users.${name}`, user.id), {}, { preserveScroll: true });
 </script>
 
 <template>
     <AppLayout title="Users">
-        <div class="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
-            <div>
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Users</h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Create users, assign roles or direct permissions, and control account access from one table.</p>
+        <template #actions>
+            <button class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white">
+                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16" />
+                </svg>
+                Export CSV
+            </button>
+            <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" @click="openCreateModal">
+                <span class="text-base leading-none">+</span>
+                New User
+            </button>
+        </template>
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Total</p>
+                <p class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ stats.total }}</p>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <input v-model="filter.search" class="rounded-md border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900" placeholder="Search users">
-                <select v-model="filter.status" class="rounded-md border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-                    <option value="">All statuses</option>
-                    <option value="active">Active</option>
-                    <option value="suspended">Suspended</option>
-                    <option value="terminated">Terminated</option>
-                </select>
-                <select v-model="filter.role" class="rounded-md border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900">
-                    <option value="">All roles</option>
-                    <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
-                </select>
+            <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Active</p>
+                <p class="mt-2 text-3xl font-bold text-emerald-400">{{ stats.active }}</p>
+            </div>
+            <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Suspended</p>
+                <p class="mt-2 text-3xl font-bold text-amber-400">{{ stats.suspended }}</p>
+            </div>
+            <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Terminated</p>
+                <p class="mt-2 text-3xl font-bold text-red-400">{{ stats.terminated }}</p>
             </div>
         </div>
 
-        <div class="grid gap-6 2xl:grid-cols-[440px_1fr]">
-            <form class="rounded-md border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900" @submit.prevent="save">
-                <h3 class="font-semibold text-gray-900 dark:text-white">{{ form.id ? 'Edit user' : 'Create user' }}</h3>
-                <div class="mt-4 grid gap-4">
-                    <input v-model="form.name" class="rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-950" placeholder="Full name" required>
-                    <input v-model="form.email" type="email" class="rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-950" placeholder="Email address" required>
-                    <input v-model="form.password" type="password" class="rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-950" :placeholder="form.id ? 'New password optional' : 'Password'" :required="!form.id">
-                    <div class="grid gap-3 md:grid-cols-2">
-                        <select v-model="form.status" class="rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-950">
+        <div class="mt-4 flex flex-col justify-between gap-3 md:flex-row">
+            <div class="flex flex-wrap gap-2">
+                <button
+                    v-for="status in ['', 'active', 'suspended', 'terminated']"
+                    :key="status || 'all'"
+                    class="h-8 rounded-md border px-3 text-xs font-medium capitalize"
+                    :class="filter.status === status ? 'border-violet-500 bg-violet-500 text-white' : 'border-gray-200 text-gray-500 hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-white'"
+                    @click="filter.status = status"
+                >
+                    {{ status || 'All' }}
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <select v-model="filter.role" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300">
+                    <option value="">All roles</option>
+                    <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
+                </select>
+                <input v-model="filter.search" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300 dark:placeholder:text-gray-600" placeholder="Search name, email...">
+            </div>
+        </div>
+
+        <div class="mt-4 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-[#273044] dark:bg-[#11141b]">
+            <table v-if="users.data.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
+                <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
+                    <tr>
+                        <th class="px-5 py-3">User</th>
+                        <th class="px-5 py-3">Access</th>
+                        <th class="px-5 py-3">Status</th>
+                        <th class="px-5 py-3">Created</th>
+                        <th class="px-5 py-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
+                    <tr v-for="user in users.data" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
+                        <td class="px-5 py-4">
+                            <p class="font-semibold text-gray-900 dark:text-white">{{ user.name }}</p>
+                            <p class="text-xs text-gray-500">{{ user.email }}</p>
+                        </td>
+                        <td class="px-5 py-4 text-xs">
+                            <p class="text-gray-700 dark:text-gray-300">{{ user.roles.map((role) => role.name).join(', ') || 'No roles' }}</p>
+                            <p class="mt-1 text-gray-500">{{ user.permissions.map((permission) => permission.name).join(', ') || 'No direct permissions' }}</p>
+                        </td>
+                        <td class="px-5 py-4">
+                            <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="user.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : user.status === 'suspended' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'">
+                                - {{ user.status }}
+                            </span>
+                            <p v-if="user.status_reason" class="mt-1 text-xs text-gray-500">{{ user.status_reason }}</p>
+                        </td>
+                        <td class="px-5 py-4 text-xs text-gray-500">{{ user.created_at }}</td>
+                        <td class="px-5 py-4 text-right">
+                            <div class="flex justify-end gap-2">
+                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(user)">Edit</button>
+                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-amber-600 transition hover:border-amber-400 dark:border-[#2a3040] dark:text-amber-300" @click="postAction('suspend', user)">Suspend</button>
+                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-emerald-600 transition hover:border-emerald-400 dark:border-[#2a3040] dark:text-emerald-300" @click="postAction('activate', user)">Activate</button>
+                                <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" @click="postAction('terminate', user)">Terminate</button>
+                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 transition hover:border-red-400 hover:text-red-600 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-red-300" @click="destroyUser(user)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div v-else class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
+                <div class="inline-flex size-12 items-center justify-center rounded-md bg-gray-100 text-gray-500 dark:bg-[#222738]">
+                    <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 19v-1.5A3.5 3.5 0 0 0 12.5 14h-5A3.5 3.5 0 0 0 4 17.5V19m12-8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                    </svg>
+                </div>
+                <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No users found</p>
+                <p class="mt-1 max-w-sm text-sm text-gray-500">Create a user or adjust your filters to see account records.</p>
+                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New User</button>
+            </div>
+
+            <div class="border-t border-gray-200 p-4 dark:border-[#232837]">
+                <Pagination :links="users.links" />
+            </div>
+        </div>
+
+        <DialogModal :show="showingUserModal" max-width="4xl" @close="closeModal">
+            <template #title>
+                {{ form.id ? 'Edit user' : 'Create user' }}
+            </template>
+
+            <template #content>
+                <form id="user-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="save">
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Name</label>
+                        <input v-model="form.name" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                        <p v-if="form.errors.name" class="mt-1 text-xs text-red-400">{{ form.errors.name }}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Email</label>
+                        <input v-model="form.email" type="email" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                        <p v-if="form.errors.email" class="mt-1 text-xs text-red-400">{{ form.errors.email }}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Password</label>
+                        <input v-model="form.password" type="password" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :required="!form.id" :placeholder="form.id ? 'Leave blank to keep current password' : ''">
+                        <p v-if="form.errors.password" class="mt-1 text-xs text-red-400">{{ form.errors.password }}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Status</label>
+                        <select v-model="form.status" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
                             <option value="active">Active</option>
                             <option value="suspended">Suspended</option>
                             <option value="terminated">Terminated</option>
                         </select>
-                        <input v-model="form.suspended_until" type="datetime-local" class="rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-950">
                     </div>
-                    <textarea v-model="form.status_reason" class="rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-950" rows="2" placeholder="Status reason" />
-                    <div class="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <p class="mb-2 text-xs font-semibold uppercase text-gray-500">Roles</p>
-                            <div class="max-h-40 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                                <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm">
-                                    <input v-model="form.role_ids" type="checkbox" :value="role.id" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
-                                    {{ role.name }}
-                                </label>
-                            </div>
-                        </div>
-                        <div>
-                            <p class="mb-2 text-xs font-semibold uppercase text-gray-500">Direct permissions</p>
-                            <div class="max-h-40 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                                <label v-for="permission in permissions" :key="permission.id" class="flex items-center gap-2 text-sm">
-                                    <input v-model="form.permission_ids" type="checkbox" :value="permission.id" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                    {{ permission.name }}
-                                </label>
-                            </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Suspended until</label>
+                        <input v-model="form.suspended_until" type="datetime-local" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Status reason</label>
+                        <textarea v-model="form.status_reason" rows="2" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" />
+                    </div>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Roles</p>
+                        <div class="mt-2 max-h-44 space-y-2 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 dark:border-[#2a3040] dark:bg-[#0c0f16]">
+                            <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm">
+                                <input v-model="form.role_ids" type="checkbox" :value="role.id" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
+                                {{ role.name }}
+                            </label>
                         </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 dark:bg-violet-600 dark:hover:bg-violet-500" :disabled="form.processing">Save</button>
-                        <button type="button" class="rounded-md border border-gray-300 px-4 py-2 text-sm dark:border-gray-700" @click="resetForm">Clear</button>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Direct permissions</p>
+                        <div class="mt-2 max-h-44 space-y-2 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 dark:border-[#2a3040] dark:bg-[#0c0f16]">
+                            <label v-for="permission in permissions" :key="permission.id" class="flex items-center gap-2 text-sm">
+                                <input v-model="form.permission_ids" type="checkbox" :value="permission.id" class="rounded border-[#2a3040] bg-[#090c11] text-blue-500 focus:ring-blue-500">
+                                {{ permission.name }}
+                            </label>
+                        </div>
                     </div>
-                </div>
-            </form>
+                </form>
+            </template>
 
-            <div class="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
-                    <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-950 dark:text-gray-400">
-                        <tr><th class="px-4 py-3">User</th><th class="px-4 py-3">Access</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Actions</th></tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                        <tr v-for="user in users.data" :key="user.id">
-                            <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">{{ user.name }}<p class="text-xs font-normal text-gray-500">{{ user.email }}</p></td>
-                            <td class="px-4 py-3 text-xs">
-                                <p>Roles: {{ user.roles.map((role) => role.name).join(', ') || 'None' }}</p>
-                                <p class="text-gray-500">Direct: {{ user.permissions.map((permission) => permission.name).join(', ') || 'None' }}</p>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="user.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : user.status === 'suspended' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300'">{{ user.status }}</span>
-                                <p class="mt-1 text-xs text-gray-500">{{ user.status_reason }}</p>
-                            </td>
-                            <td class="space-x-3 px-4 py-3 text-right">
-                                <button class="text-blue-600 dark:text-blue-300" @click="edit(user)">Edit</button>
-                                <button class="text-amber-600 dark:text-amber-300" @click="postAction('suspend', user)">Suspend</button>
-                                <button class="text-emerald-600 dark:text-emerald-300" @click="postAction('activate', user)">Activate</button>
-                                <button class="text-red-600 dark:text-red-300" @click="postAction('terminate', user)">Terminate</button>
-                                <button class="text-gray-500 dark:text-gray-400" @click="destroyUser(user)">Delete</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="border-t border-gray-200 p-4 dark:border-gray-800"><Pagination :links="users.links" /></div>
-            </div>
-        </div>
+            <template #footer>
+                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeModal">Cancel</button>
+                <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="user-form" type="submit" :disabled="form.processing">
+                    {{ form.processing ? 'Saving...' : 'Save user' }}
+                </button>
+            </template>
+        </DialogModal>
     </AppLayout>
 </template>

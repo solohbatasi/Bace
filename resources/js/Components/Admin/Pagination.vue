@@ -12,9 +12,9 @@ defineProps({
             v-for="link in links"
             :key="link.label"
             :href="link.url || '#'"
-            class="rounded-md border px-3 py-1.5 text-sm"
+            class="rounded-md border px-3 py-1.5 text-xs"
             :class="[
-                link.active ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-violet-400 dark:bg-violet-500/10 dark:text-violet-200' : 'border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300',
+                link.active ? 'border-violet-500 bg-violet-500 text-white' : 'border-gray-200 text-gray-500 hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-white',
                 !link.url ? 'pointer-events-none opacity-40' : ''
             ]"
             v-html="link.label"
