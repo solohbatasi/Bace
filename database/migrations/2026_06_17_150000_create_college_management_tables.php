@@ -65,6 +65,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('qualification_level', 80)->nullable();
             $table->unsignedSmallInteger('duration_semesters');
+            $table->decimal('fees', 12, 2)->default(0);
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
             $this->auditColumns($table);
