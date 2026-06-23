@@ -20,6 +20,9 @@ const sidebarOpen = ref(localStorage.getItem('sidebar') !== 'closed');
 const navigation = computed(() => [
     { name: 'Dashboard', route: 'dashboard', href: route('dashboard'), icon: 'dashboard' },
     { name: 'Users', route: 'admin.users.*', href: route('admin.users.index'), icon: 'users' },
+    { name: 'Courses', route: 'academics.courses.*', href: route('academics.courses.index'), icon: 'book' },
+    { name: 'Enrollments', route: 'academics.enrollments.*', href: route('academics.enrollments.index'), icon: 'clipboard' },
+    { name: 'Assignments', route: 'academics.assignments.*', href: route('academics.assignments.index'), icon: 'file' },
     { name: 'Roles', route: 'admin.roles.*', href: route('admin.roles.index'), icon: 'shield' },
     { name: 'Permissions', route: 'admin.permissions.*', href: route('admin.permissions.index'), icon: 'key' },
     { name: 'System Health', route: 'admin.system-health', href: route('admin.system-health'), icon: 'activity' },
@@ -67,6 +70,9 @@ const logout = () => router.post(route('logout'));
                             <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <path v-if="item.icon === 'dashboard'" stroke-linecap="round" stroke-linejoin="round" d="M4 13h6V4H4v9Zm10 7h6V4h-6v16ZM4 20h6v-4H4v4Z" />
                                 <path v-else-if="item.icon === 'users'" stroke-linecap="round" stroke-linejoin="round" d="M16 19v-1.5A3.5 3.5 0 0 0 12.5 14h-5A3.5 3.5 0 0 0 4 17.5V19m15 0v-1a3 3 0 0 0-2-2.83M13 5.17a3 3 0 0 1 0 5.66M10 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                <path v-else-if="item.icon === 'book'" stroke-linecap="round" stroke-linejoin="round" d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v16H7.5A2.5 2.5 0 0 0 5 21V5.5Zm0 0A2.5 2.5 0 0 1 7.5 8H20" />
+                                <path v-else-if="item.icon === 'clipboard'" stroke-linecap="round" stroke-linejoin="round" d="M9 4h6l1 2h3v15H5V6h3l1-2Zm0 7h6m-6 4h6" />
+                                <path v-else-if="item.icon === 'file'" stroke-linecap="round" stroke-linejoin="round" d="M7 3h7l5 5v13H7V3Zm7 0v5h5M9 13h6m-6 4h6" />
                                 <path v-else-if="item.icon === 'shield'" stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-3.5 7-10V5l-7-2-7 2v6c0 6.5 7 10 7 10Z" />
                                 <path v-else-if="item.icon === 'key'" stroke-linecap="round" stroke-linejoin="round" d="M15 7a4 4 0 1 1-1.2 2.86L4 19.66V22h3v-2h2v-2h2l2.14-2.14A4 4 0 0 1 15 7Z" />
                                 <path v-else-if="item.icon === 'activity'" stroke-linecap="round" stroke-linejoin="round" d="M4 13h4l2-7 4 14 2-7h4" />

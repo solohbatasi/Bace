@@ -20,14 +20,48 @@ class RbacSeeder extends Seeder
             ['name' => 'permissions.manage', 'group' => 'access', 'description' => 'Manage permission definitions.'],
             ['name' => 'health.view', 'group' => 'security', 'description' => 'View system health, sessions, and tokens.'],
             ['name' => 'tokens.revoke', 'group' => 'security', 'description' => 'Revoke API tokens and browser sessions.'],
+            ['name' => 'students.view', 'group' => 'students', 'description' => 'View student records and profiles.'],
+            ['name' => 'students.create', 'group' => 'students', 'description' => 'Admit new students.'],
+            ['name' => 'students.update', 'group' => 'students', 'description' => 'Update student profile, guardian, academic, course, class, and status records.'],
+            ['name' => 'students.delete', 'group' => 'students', 'description' => 'Delete student records.'],
+            ['name' => 'finance.view', 'group' => 'finance', 'description' => 'View billing, invoices, payments, and receipts.'],
+            ['name' => 'finance.manage', 'group' => 'finance', 'description' => 'Manage fees, invoices, payments, and receipts.'],
+            ['name' => 'classes.manage', 'group' => 'academics', 'description' => 'Manage classes, courses, units, and enrollments.'],
+            ['name' => 'assignments.manage', 'group' => 'academics', 'description' => 'Manage assignments, submissions, and grading.'],
+            ['name' => 'attendance.manage', 'group' => 'academics', 'description' => 'Manage attendance records.'],
         ])->map(fn ($permission) => Permission::firstOrCreate(
             ['name' => $permission['name']],
             ['group' => $permission['group'], 'description' => $permission['description']]
         ));
 
+        $superAdmin = Role::firstOrCreate(
+            ['name' => 'Super Admin'],
+            ['guard_name' => 'web', 'description' => 'Full operational access across the college management system.']
+        );
+
+        $registrar = Role::firstOrCreate(
+            ['name' => 'Registrar'],
+            ['guard_name' => 'web', 'description' => 'Student admissions, academic records, courses, and class assignments.']
+        );
+
+        $financeOfficer = Role::firstOrCreate(
+            ['name' => 'Finance Officer'],
+            ['guard_name' => 'web', 'description' => 'Fees, invoices, payments, and receipts.']
+        );
+
+        $lecturer = Role::firstOrCreate(
+            ['name' => 'Lecturer'],
+            ['guard_name' => 'web', 'description' => 'Teaching, assignments, grading, and attendance.']
+        );
+
+        $student = Role::firstOrCreate(
+            ['name' => 'Student'],
+            ['guard_name' => 'web', 'description' => 'Student self-service access.']
+        );
+
         $administrator = Role::firstOrCreate(
             ['name' => 'Administrator'],
-            ['guard_name' => 'web', 'description' => 'Full operational access to users, access control, and system health.']
+            ['guard_name' => 'web', 'description' => 'Legacy administrator role retained for compatibility.']
         );
 
         $support = Role::firstOrCreate(
@@ -35,7 +69,20 @@ class RbacSeeder extends Seeder
             ['guard_name' => 'web', 'description' => 'Frontline account review and support access.']
         );
 
+        $superAdmin->permissions()->syncWithoutDetaching($permissions->pluck('id'));
         $administrator->permissions()->syncWithoutDetaching($permissions->pluck('id'));
+        $registrar->permissions()->syncWithoutDetaching(
+            $permissions->whereIn('name', ['students.view', 'students.create', 'students.update', 'classes.manage'])->pluck('id')
+        );
+        $financeOfficer->permissions()->syncWithoutDetaching(
+            $permissions->whereIn('name', ['students.view', 'finance.view', 'finance.manage'])->pluck('id')
+        );
+        $lecturer->permissions()->syncWithoutDetaching(
+            $permissions->whereIn('name', ['students.view', 'assignments.manage', 'attendance.manage'])->pluck('id')
+        );
+        $student->permissions()->syncWithoutDetaching(
+            $permissions->whereIn('name', ['students.view'])->pluck('id')
+        );
         $support->permissions()->syncWithoutDetaching(
             $permissions->whereIn('name', ['users.view', 'health.view'])->pluck('id')
         );
@@ -43,7 +90,7 @@ class RbacSeeder extends Seeder
         $firstUser = User::oldest('id')->first();
 
         if ($firstUser) {
-            $firstUser->roles()->syncWithoutDetaching([$administrator->id]);
+            $firstUser->roles()->syncWithoutDetaching([$superAdmin->id]);
         }
     }
 }
