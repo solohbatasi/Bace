@@ -14,6 +14,7 @@ use App\Http\Controllers\EnrollmentManagementController;
 use App\Http\Controllers\LecturerManagementController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnitManagementController;
+use App\Models\Course;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -47,7 +48,9 @@ Route::middleware([
         Route::delete('system-health/tokens/{token}', [SystemHealthController::class, 'destroyToken'])->name('system-health.tokens.destroy');
     });
 
+    // Student routes - ADD THE ENROLL ROUTE HERE
     Route::resource('students', StudentController::class)->middleware('permission:students.view');
+    Route::post('students/enroll', [StudentController::class, 'enroll'])->name('students.enroll')->middleware('permission:students.view');
 
     Route::prefix('academics')->name('academics.')->group(function () {
         Route::get('courses', [CourseManagementController::class, 'index'])->name('courses.index');
@@ -74,5 +77,12 @@ Route::middleware([
         Route::post('assignments/{assignment}/publish', [AssignmentManagementController::class, 'publish'])->name('assignments.publish');
         Route::post('assignments/{assignment}/submit', [AssignmentManagementController::class, 'submit'])->name('assignments.submit');
         Route::get('assignments/{assignment}/attachments/{attachment}', [AssignmentManagementController::class, 'downloadAttachment'])->name('assignments.attachments.download');
+    });
+
+    // API routes for fetching course units - ADD THIS
+    Route::middleware(['auth:sanctum'])->prefix('api')->name('api.')->group(function () {
+        Route::get('courses/{course}/units', function (Course $course) {
+            return $course->units()->where('is_active', true)->get(['id', 'code', 'name', 'credit_hours']);
+        })->name('courses.units');
     });
 });
