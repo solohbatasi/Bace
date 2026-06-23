@@ -9,8 +9,11 @@ use App\Http\Controllers\Admin\SystemHealthController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AssignmentManagementController;
 use App\Http\Controllers\CourseManagementController;
+use App\Http\Controllers\DepartmentManagementController;
 use App\Http\Controllers\EnrollmentManagementController;
+use App\Http\Controllers\LecturerManagementController;
 use App\Http\Controllers\StudentController;
+use App\Http\Controllers\UnitManagementController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -51,8 +54,12 @@ Route::middleware([
         Route::post('courses', [CourseManagementController::class, 'storeCourse'])->name('courses.store');
         Route::put('courses/{course}', [CourseManagementController::class, 'updateCourse'])->name('courses.update');
         Route::delete('courses/{course}', [CourseManagementController::class, 'destroyCourse'])->name('courses.destroy');
+        Route::resource('departments', DepartmentManagementController::class)->except(['create', 'edit', 'show']);
+        Route::resource('lecturers', LecturerManagementController::class)->except(['create', 'edit', 'show']);
+        Route::get('units', [UnitManagementController::class, 'index'])->name('units.index');
         Route::post('units', [CourseManagementController::class, 'storeUnit'])->name('units.store');
         Route::put('units/{unit}', [CourseManagementController::class, 'updateUnit'])->name('units.update');
+        Route::delete('units/{unit}', [UnitManagementController::class, 'destroy'])->name('units.destroy');
         Route::post('units/{unit}/lecturers', [CourseManagementController::class, 'assignLecturer'])->name('units.lecturers.store');
 
         Route::get('enrollments', [EnrollmentManagementController::class, 'index'])->name('enrollments.index');

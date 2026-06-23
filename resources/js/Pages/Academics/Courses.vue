@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
@@ -16,12 +17,13 @@ const props = defineProps({
 });
 
 const filter = reactive({ search: props.filters.search || '', department_id: props.filters.department_id || '' });
-const courseForm = useForm({ department_id: '', code: '', name: '', qualification_level: '', duration_semesters: 1, fees: 0, description: '', is_active: true });
+const courseForm = useForm({ id: null, department_id: '', code: '', name: '', qualification_level: '', duration_semesters: 1, fees: 0, description: '', is_active: true });
 const unitForm = useForm({ course_id: '', department_id: '', code: '', name: '', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
 const assignmentForm = useForm({ unit_id: '', lecturer_id: '', class_id: '', semester_id: '', academic_year_id: '', is_primary: true });
 const showingCourseModal = ref(false);
 const showingUnitModal = ref(false);
 const showingLecturerModal = ref(false);
+const deletingCourse = ref(null);
 
 watch(filter, () => router.get(route('academics.courses.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
@@ -35,9 +37,14 @@ const stats = computed(() => ({
 
 const resetCourseForm = () => {
     courseForm.clearErrors();
-    courseForm.reset();
+    courseForm.id = null;
+    courseForm.department_id = '';
+    courseForm.code = '';
+    courseForm.name = '';
+    courseForm.qualification_level = '';
     courseForm.duration_semesters = 1;
     courseForm.fees = 0;
+    courseForm.description = '';
     courseForm.is_active = true;
 };
 
@@ -62,6 +69,25 @@ const openCourseModal = () => {
     showingCourseModal.value = true;
 };
 
+const editCourse = (course) => {
+    resetCourseForm();
+    courseForm.id = course.id;
+    courseForm.department_id = course.department_id;
+    courseForm.code = course.code;
+    courseForm.name = course.name;
+    courseForm.qualification_level = course.qualification_level || '';
+    courseForm.duration_semesters = course.duration_semesters;
+    courseForm.fees = course.fees ?? 0;
+    courseForm.description = course.description || '';
+    courseForm.is_active = Boolean(course.is_active);
+    showingCourseModal.value = true;
+};
+
+const closeCourseModal = () => {
+    showingCourseModal.value = false;
+    resetCourseForm();
+};
+
 const openUnitModal = () => {
     resetUnitForm();
     showingUnitModal.value = true;
@@ -72,13 +98,27 @@ const openLecturerModal = () => {
     showingLecturerModal.value = true;
 };
 
-const saveCourse = () => courseForm.post(route('academics.courses.store'), {
-    preserveScroll: true,
-    onSuccess: () => {
-        resetCourseForm();
-        showingCourseModal.value = false;
-    },
-});
+const saveCourse = () => {
+    const options = { preserveScroll: true, onSuccess: closeCourseModal };
+    courseForm.id ? courseForm.put(route('academics.courses.update', courseForm.id), options) : courseForm.post(route('academics.courses.store'), options);
+};
+
+const destroyCourse = (course) => {
+    deletingCourse.value = course;
+};
+
+const closeDeleteCourseModal = () => {
+    deletingCourse.value = null;
+};
+
+const confirmDeleteCourse = () => {
+    if (!deletingCourse.value) return;
+
+    router.delete(route('academics.courses.destroy', deletingCourse.value.id), {
+        preserveScroll: true,
+        onSuccess: closeDeleteCourseModal,
+    });
+};
 
 const saveUnit = () => unitForm.post(route('academics.units.store'), {
     preserveScroll: true,
@@ -182,6 +222,7 @@ const exportCsv = () => {
                         <th class="px-5 py-3">Fees</th>
                         <th class="px-5 py-3">Status</th>
                         <th class="px-5 py-3">Units</th>
+                        <th class="px-5 py-3 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
@@ -207,6 +248,10 @@ const exportCsv = () => {
                                 <span v-if="!course.units.length" class="text-xs text-gray-500">No units</span>
                             </div>
                         </td>
+                        <td class="px-5 py-4 text-right">
+                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editCourse(course)">Edit</button>
+                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyCourse(course)">Delete</button>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -227,8 +272,8 @@ const exportCsv = () => {
             </div>
         </div>
 
-        <DialogModal :show="showingCourseModal" max-width="2xl" @close="showingCourseModal = false">
-            <template #title>Add course</template>
+        <DialogModal :show="showingCourseModal" max-width="2xl" @close="closeCourseModal">
+            <template #title>{{ courseForm.id ? 'Edit course' : 'Add course' }}</template>
 
             <template #content>
                 <form id="course-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="saveCourse">
@@ -274,9 +319,9 @@ const exportCsv = () => {
             </template>
 
             <template #footer>
-                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="showingCourseModal = false">Cancel</button>
+                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeCourseModal">Cancel</button>
                 <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="course-form" type="submit" :disabled="courseForm.processing">
-                    {{ courseForm.processing ? 'Saving...' : 'Save course' }}
+                    {{ courseForm.processing ? 'Saving...' : (courseForm.id ? 'Update course' : 'Save course') }}
                 </button>
             </template>
         </DialogModal>
@@ -397,5 +442,19 @@ const exportCsv = () => {
                 </button>
             </template>
         </DialogModal>
+
+        <ConfirmationModal :show="Boolean(deletingCourse)" max-width="md" @close="closeDeleteCourseModal">
+            <template #title>Delete course</template>
+            <template #content>
+                <p>
+                    Delete <span class="font-semibold text-gray-900 dark:text-white">{{ deletingCourse?.code }} - {{ deletingCourse?.name }}</span>?
+                </p>
+                <p class="mt-2">This removes the course from active academic records.</p>
+            </template>
+            <template #footer>
+                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeDeleteCourseModal">Cancel</button>
+                <button class="rounded-md bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400" type="button" @click="confirmDeleteCourse">Delete course</button>
+            </template>
+        </ConfirmationModal>
     </AppLayout>
 </template>
