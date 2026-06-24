@@ -32,7 +32,7 @@ class PaymentController extends Controller
                     'payments:id,student_id,course_id,amount,status',
                 ])
                 ->orderBy('admission_number')
-                ->get(['id', 'admission_number', 'first_name', 'last_name', 'course_id'])
+                ->get(['id', 'admission_number', 'first_name', 'last_name', 'course_id', 'course_fee'])
                 ->map(fn (Student $student) => $this->studentOption($student)),
             'payments' => Payment::query()
                 ->with(['student:id,admission_number,first_name,last_name', 'course:id,code,name,fees'])
@@ -112,14 +112,20 @@ class PaymentController extends Controller
             ->filter()
             ->unique('id')
             ->values()
-            ->map(fn ($course) => [
-                'id' => $course->id,
-                'code' => $course->code,
-                'name' => $course->name,
-                'fees' => (float) $course->fees,
-                'paid' => (float) ($paidByCourse[$course->id] ?? 0),
-                'balance' => max((float) $course->fees - (float) ($paidByCourse[$course->id] ?? 0), 0),
-            ]);
+            ->map(function ($course) use ($paidByCourse, $student) {
+                $fees = (int) $course->id === (int) $student->course_id && $student->course_fee !== null
+                    ? (float) $student->course_fee
+                    : (float) $course->fees;
+
+                return [
+                    'id' => $course->id,
+                    'code' => $course->code,
+                    'name' => $course->name,
+                    'fees' => $fees,
+                    'paid' => (float) ($paidByCourse[$course->id] ?? 0),
+                    'balance' => max($fees - (float) ($paidByCourse[$course->id] ?? 0), 0),
+                ];
+            });
 
         return [
             'id' => $student->id,

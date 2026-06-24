@@ -33,7 +33,7 @@ class StudentController extends Controller
 
         return Inertia::render('Students/Index', [
             'students' => Student::query()
-                ->with(['department:id,name,code', 'course:id,name,code', 'class:id,name,code'])
+                ->with(['department:id,name,code', 'course:id,name,code,fees', 'class:id,name,code'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('admission_number', 'like', "%{$search}%")
                     ->orWhere('first_name', 'like', "%{$search}%")
@@ -47,7 +47,7 @@ class StudentController extends Controller
                 ->withQueryString(),
             'filters' => $filters,
             'statuses' => Student::STATUSES,
-            'courses' => Course::orderBy('name')->get(['id', 'name', 'code']),
+            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'fees']),
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
             'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
@@ -99,7 +99,7 @@ class StudentController extends Controller
 
             // Filter out Vue form helper properties
             $allowedKeys = [
-                'department_id', 'course_id', 'class_id', 'admission_number',
+                'department_id', 'course_id', 'course_fee', 'class_id', 'admission_number',
                 'first_name', 'middle_name', 'last_name', 'gender', 'date_of_birth',
                 'email', 'phone', 'address', 'guardian_name',
                 'guardian_relationship', 'guardian_phone', 'guardian_email',
@@ -132,6 +132,7 @@ class StudentController extends Controller
             $validated = $request->validate([
                 'department_id' => ['required', 'exists:departments,id'],
                 'course_id' => ['required', 'exists:courses,id'],
+                'course_fee' => ['nullable', 'numeric', 'min:0'],
                 'class_id' => [
                     'required',
                     Rule::exists('classes', 'id')
@@ -331,7 +332,7 @@ class StudentController extends Controller
         return [
             'statuses' => Student::STATUSES,
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
-            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'department_id']),
+            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'department_id', 'fees']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
         ];
     }

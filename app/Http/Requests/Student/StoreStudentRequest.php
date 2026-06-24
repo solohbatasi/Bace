@@ -19,6 +19,7 @@ class StoreStudentRequest extends FormRequest
             'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'department_id' => ['required', 'integer', Rule::exists('departments', 'id')],
             'course_id' => ['required', 'integer', Rule::exists('courses', 'id')],
+            'course_fee' => ['nullable', 'numeric', 'min:0'],
             'class_id' => ['nullable', 'integer', Rule::exists('classes', 'id')],
             'admission_number' => ['nullable', 'string', 'max:50'],
             'first_name' => ['required', 'string', 'max:100'],
