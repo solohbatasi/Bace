@@ -8,6 +8,17 @@ use Illuminate\Validation\Rule;
 
 class StoreStudentRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('academic_histories') && is_string($this->input('academic_histories'))) {
+            $decoded = json_decode($this->input('academic_histories'), true);
+
+            $this->merge([
+                'academic_histories' => is_array($decoded) ? $decoded : [],
+            ]);
+        }
+    }
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', Student::class) ?? false;

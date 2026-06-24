@@ -130,6 +130,11 @@ const selectedClassLabel = computed(() => {
     return cls ? `${cls.code} - ${cls.name}` : 'Select class';
 });
 
+const dateInputValue = (value) => {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+};
+
 const showingEnrollmentModal = ref(false);
 const deletingStudent = ref(null);
 const selectedUnits = ref([]);
@@ -200,7 +205,7 @@ const editStudent = (student) => {
     studentForm.middle_name = student.middle_name || '';
     studentForm.last_name = student.last_name;
     studentForm.gender = student.gender || '';
-    studentForm.date_of_birth = student.date_of_birth || '';
+    studentForm.date_of_birth = dateInputValue(student.date_of_birth);
     studentForm.email = student.email || '';
     studentForm.phone = student.phone || '';
     studentForm.address = student.address || '';
@@ -216,7 +221,7 @@ const editStudent = (student) => {
         student.guardian_email ||
         student.guardian_address
     );
-    studentForm.admitted_on = student.admitted_on;
+    studentForm.admitted_on = dateInputValue(student.admitted_on);
     studentForm.status = student.status;
     studentForm.photo_preview = student.photo_path ? `/storage/${student.photo_path}` : null;
 
@@ -569,11 +574,12 @@ const exportCsv = () => {
                             </div>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
-                            {{ student.department?.code || '-' }}
+                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ student.department?.name || '-' }}</p>
+                            <p class="text-xs text-gray-500">{{ student.department?.code || '' }}</p>
                         </td>
                         <td class="px-5 py-4">
-                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ student.course?.code }}</p>
-                            <p class="text-xs text-gray-500">{{ student.course?.name }}</p>
+                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ student.course?.name || '-' }}</p>
+                            <p class="text-xs text-gray-500">{{ student.course?.code || '' }}</p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             {{ student.class?.name || 'Not assigned' }}

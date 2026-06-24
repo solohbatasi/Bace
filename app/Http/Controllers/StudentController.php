@@ -314,7 +314,7 @@ class StudentController extends Controller
             }
         });
 
-        return redirect()->route('students.show', $student)->with('flash.banner', 'Student updated.');
+        return redirect()->route('students.index')->with('flash.banner', 'Student updated.');
     }
 
     public function destroy(Request $request, Student $student): RedirectResponse
