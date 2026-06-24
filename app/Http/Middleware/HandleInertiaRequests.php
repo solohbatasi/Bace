@@ -42,10 +42,16 @@ class HandleInertiaRequests extends Middleware
                 'name',
                 'short_name',
                 'logo_url',
+                'official_email',
+                'primary_contact',
+                'location',
             ]) ?? [
                 'name' => config('app.name'),
                 'short_name' => 'ISP',
                 'logo_url' => null,
+                'official_email' => null,
+                'primary_contact' => null,
+                'location' => null,
             ],
         ];
     }
