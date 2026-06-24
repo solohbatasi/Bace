@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue';
-import { router, useForm } from '@inertiajs/vue3';
+import { router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
@@ -14,6 +14,9 @@ const props = defineProps({
     payments: Object,
     summary: Object,
 });
+
+const page = usePage();
+const organisation = computed(() => page.props.organisation || {});
 
 const filter = reactive({
     search: props.filters.search || '',
@@ -69,6 +72,32 @@ const stats = computed(() => ({
 }));
 
 const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
+const escapeHtml = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+const formatDate = (value) => {
+    if (!value) return '';
+
+    return new Date(value).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+    });
+};
+
+const paymentCourseSummary = (payment) => {
+    const student = props.students.find((item) => Number(item.id) === Number(payment.student_id));
+    const course = student?.courses.find((item) => Number(item.id) === Number(payment.course_id));
+
+    return {
+        paid: course?.paid ?? payment.amount,
+        balance: course?.balance ?? 0,
+    };
+};
 
 watch(filter, () => router.get(route('finance.payments.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
@@ -161,6 +190,225 @@ const confirmDeletePayment = () => {
         preserveScroll: true,
         onSuccess: closeDeletePaymentModal,
     });
+};
+
+const printReceipt = (payment) => {
+    const printWindow = window.open('', '_blank', 'width=820,height=900');
+
+    if (!printWindow) {
+        return;
+    }
+
+    const org = organisation.value;
+    const studentName = `${payment.student?.first_name || ''} ${payment.student?.last_name || ''}`.trim();
+    const courseName = payment.course ? `${payment.course.code} - ${payment.course.name}` : 'Not assigned';
+    const courseSummary = paymentCourseSummary(payment);
+    const logo = org.logo_url
+        ? `<img src="${escapeHtml(org.logo_url)}" alt="${escapeHtml(org.name || 'Logo')}" class="logo">`
+        : `<div class="logo-fallback">${escapeHtml(org.short_name || org.name || 'ISP')}</div>`;
+
+    printWindow.document.write(`
+        <!doctype html>
+        <html>
+            <head>
+                <title>Receipt ${escapeHtml(payment.payment_reference || payment.id)}</title>
+                <style>
+                    * { box-sizing: border-box; }
+                    @page {
+                        size: 80mm auto;
+                        margin: 3mm;
+                    }
+                    body {
+                        margin: 0;
+                        background: #ffffff;
+                        color: #000000;
+                        font-family: "Courier New", Courier, monospace;
+                        font-size: 11px;
+                    }
+                    .receipt {
+                        width: 72mm;
+                        margin: 0 auto;
+                        background: #ffffff;
+                        padding: 0;
+                    }
+                    .header {
+                        text-align: center;
+                    }
+                    .logo-wrap {
+                        display: flex;
+                        justify-content: center;
+                        margin-bottom: 5px;
+                    }
+                    .logo,
+                    .logo-fallback {
+                        width: 38px;
+                        height: 38px;
+                        object-fit: contain;
+                    }
+                    .logo-fallback {
+                        display: grid;
+                        place-items: center;
+                        border: 1px solid #000000;
+                        color: #000000;
+                        font-size: 11px;
+                        font-weight: 700;
+                    }
+                    h1,
+                    h2,
+                    p { margin: 0; }
+                    .org-name {
+                        font-size: 14px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                    }
+                    .org-meta {
+                        margin-top: 3px;
+                        font-size: 10px;
+                        line-height: 1.35;
+                    }
+                    .line {
+                        border-top: 1px dashed #000000;
+                        margin: 7px 0;
+                    }
+                    .title {
+                        font-size: 13px;
+                        font-weight: 700;
+                        text-align: center;
+                        text-transform: uppercase;
+                    }
+                    .row {
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 8px;
+                        line-height: 1.45;
+                    }
+                    .row span:first-child {
+                        white-space: nowrap;
+                    }
+                    .row span:last-child {
+                        text-align: right;
+                        overflow-wrap: anywhere;
+                    }
+                    .block {
+                        line-height: 1.45;
+                    }
+                    .items-header,
+                    .item-row,
+                    .total-row {
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 8px;
+                    }
+                    .items-header {
+                        font-weight: 700;
+                        text-transform: uppercase;
+                    }
+                    .item-name {
+                        flex: 1;
+                    }
+                    .item-amount {
+                        min-width: 24mm;
+                        text-align: right;
+                    }
+                    .total-row {
+                        font-size: 13px;
+                        font-weight: 700;
+                    }
+                    .signature {
+                        margin-top: 18px;
+                        border-top: 1px dashed #000000;
+                        padding-top: 5px;
+                        text-align: center;
+                    }
+                    .thanks {
+                        margin-top: 10px;
+                        text-align: center;
+                        font-weight: 700;
+                    }
+                    @media print {
+                        .receipt {
+                            width: 72mm;
+                            margin: 0;
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                <main class="receipt">
+                    <section class="header">
+                        <div class="logo-wrap">
+                            ${logo}
+                        </div>
+                        <h1 class="org-name">${escapeHtml(org.name || 'Organisation')}</h1>
+                        <p class="org-meta">
+                            ${escapeHtml(org.location || '')}<br>
+                            Tel: ${escapeHtml(org.primary_contact || '')}<br>
+                            Email: ${escapeHtml(org.official_email || '')}
+                        </p>
+                    </section>
+
+                    <div class="line"></div>
+                    <div class="title">Payment Receipt</div>
+                    <div class="line"></div>
+
+                    <section>
+                        <div class="row"><span>Receipt No:</span><span>${escapeHtml(payment.payment_reference || `PAY-${payment.id}`)}</span></div>
+                        <div class="row"><span>Date:</span><span>${escapeHtml(formatDate(payment.payment_date) || payment.payment_date)}</span></div>
+                        <div class="row"><span>Method:</span><span>${escapeHtml(payment.method || '')}</span></div>
+                        <div class="row"><span>Status:</span><span>${escapeHtml(payment.status || '')}</span></div>
+                    </section>
+
+                    <div class="line"></div>
+
+                    <section class="block">
+                        <p><strong>Student:</strong> ${escapeHtml(studentName || 'Not provided')}</p>
+                        <p><strong>Admission:</strong> ${escapeHtml(payment.student?.admission_number || '')}</p>
+                    </section>
+
+                    <div class="line"></div>
+
+                    <section>
+                        <div class="items-header">
+                            <span>Item</span>
+                            <span>Amount</span>
+                        </div>
+                        <div class="item-row">
+                            <span class="item-name">${escapeHtml(courseName)}</span>
+                            <span class="item-amount">${escapeHtml(money(payment.amount))}</span>
+                        </div>
+                    </section>
+
+                    <div class="line"></div>
+
+                    <section>
+                        <div class="total-row">
+                            <span>This Payment</span>
+                            <span>${escapeHtml(money(payment.amount))}</span>
+                        </div>
+                        <div class="row">
+                            <span>Total Paid</span>
+                            <span>${escapeHtml(money(courseSummary.paid))}</span>
+                        </div>
+                        <div class="row">
+                            <span>Balance Left</span>
+                            <span>${escapeHtml(money(courseSummary.balance))}</span>
+                        </div>
+                    </section>
+
+                    <p class="signature">Received by</p>
+                    <p class="thanks">Thank you</p>
+                    <div class="line"></div>
+                    <p class="org-meta">Printed: ${escapeHtml(new Date().toLocaleString())}</p>
+                </main>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+        printWindow.print();
+    }, 250);
 };
 
 const exportCsv = () => {
@@ -270,6 +518,7 @@ const exportCsv = () => {
                         </td>
                         <td class="px-5 py-4 text-right font-semibold text-emerald-500">{{ money(payment.amount) }}</td>
                         <td v-if="canManage" class="px-5 py-4 text-right">
+                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 transition hover:border-gray-400 dark:border-[#2a3040] dark:text-gray-300" type="button" @click="printReceipt(payment)">Print</button>
                             <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editPayment(payment)">Edit</button>
                             <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyPayment(payment)">Delete</button>
                         </td>
