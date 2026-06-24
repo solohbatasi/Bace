@@ -549,7 +549,7 @@ return new class extends Migration
             "CREATE UNIQUE INDEX units_course_code_active_unique ON units (course_id, lower(code)) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX lecturer_unit_assignments_active_unique ON lecturer_unit_assignments (lecturer_id, unit_id, class_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX enrollments_student_unit_term_active_unique ON enrollments (student_id, unit_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
-            "CREATE UNIQUE INDEX semester_registrations_student_term_active_unique ON semester_registrations (student_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
+            "CREATE UNIQUE INDEX semester_registrations_student_class_term_active_unique ON semester_registrations (student_id, class_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX assignment_submissions_student_assignment_active_unique ON assignment_submissions (assignment_id, student_id) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX assignment_submission_versions_number_active_unique ON assignment_submission_versions (assignment_submission_id, version_number) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX fees_structures_course_class_term_active_unique ON fees_structures (course_id, coalesce(class_id, 0), academic_year_id, coalesce(semester_id, 0)) WHERE deleted_at IS NULL",

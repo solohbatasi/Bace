@@ -37,6 +37,9 @@ class StudentController extends Controller
                     'department:id,name,code',
                     'course:id,name,code,fees',
                     'class:id,name,code',
+                    'enrollments.unit:id,course_id',
+                    'semesterRegistrations.enrollments:id,semester_registration_id,unit_id',
+                    'semesterRegistrations.class.course:id,name,code,department_id,fees',
                     'payments' => fn ($query) => $query
                         ->where('status', 'confirmed')
                         ->select(['id', 'student_id', 'course_id', 'amount', 'status']),
@@ -47,7 +50,9 @@ class StudentController extends Controller
                     ->orWhere('last_name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")))
                 ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
-                ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where('course_id', $courseId))
+                ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where(fn ($query) => $query
+                    ->where('course_id', $courseId)
+                    ->orWhereHas('semesterRegistrations.class', fn ($query) => $query->where('course_id', $courseId))))
                 ->when($filters['class_id'] ?? null, fn ($query, $classId) => $query->where('class_id', $classId))
                 ->latest()
                 ->paginate(20)
@@ -55,9 +60,9 @@ class StudentController extends Controller
                 ->through(fn (Student $student) => $this->studentTableData($student)),
             'filters' => $filters,
             'statuses' => Student::STATUSES,
-            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'fees']),
+            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'department_id', 'fees']),
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
-            'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
+            'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id', 'department_id', 'academic_year_id']),
             'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
             'semesters' => Semester::orderByDesc('starts_on')->get(['id', 'academic_year_id', 'name', 'sequence', 'is_current']),
         ]);
@@ -73,7 +78,7 @@ class StudentController extends Controller
     public function store(StoreStudentRequest $request): RedirectResponse
     {
         DB::transaction(function () use ($request): void {
-            $data = $request->safe()->except(['photo', 'academic_histories']);
+            $data = $request->safe()->except(['photo', 'academic_histories', 'additional_courses', 'academic_year_id', 'semester_id']);
             $data['admission_number'] = $data['admission_number'] ?: Student::nextAdmissionNumber();
             $data['created_by'] = $request->user()->id;
             $data['updated_by'] = $request->user()->id;
@@ -112,7 +117,7 @@ class StudentController extends Controller
                 'email', 'phone', 'address', 'guardian_name',
                 'guardian_relationship', 'guardian_phone', 'guardian_email',
                 'guardian_address', 'admitted_on', 'status', 'academic_year_id',
-                'semester_id', 'units', 'academic_histories'
+                'semester_id', 'units', 'academic_histories', 'additional_courses'
             ];
 
             $data = array_intersect_key($data, array_flip($allowedKeys));
@@ -131,6 +136,12 @@ class StudentController extends Controller
                 $decoded = json_decode($data['units'], true);
                 $data['units'] = is_array($decoded) ? $decoded : [];
                 Log::info('ENROLLMENT - Decoded units:', $data['units']);
+            }
+
+            if (isset($data['additional_courses']) && is_string($data['additional_courses'])) {
+                $decoded = json_decode($data['additional_courses'], true);
+                $data['additional_courses'] = is_array($decoded) ? $decoded : [];
+                Log::info('ENROLLMENT - Decoded additional courses:', $data['additional_courses']);
             }
 
             // Merge the decoded data back into the request
@@ -170,6 +181,13 @@ class StudentController extends Controller
                 'status' => ['required', Rule::in(Student::STATUSES)],
                 'units' => ['nullable', 'array'],
                 'units.*' => ['exists:units,id'],
+                'additional_courses' => ['nullable', 'array'],
+                'additional_courses.*.department_id' => ['required', 'exists:departments,id'],
+                'additional_courses.*.course_id' => ['required', 'distinct', 'exists:courses,id'],
+                'additional_courses.*.class_id' => ['required', 'exists:classes,id'],
+                'additional_courses.*.course_fee' => ['nullable', 'numeric', 'min:0'],
+                'additional_courses.*.units' => ['nullable', 'array'],
+                'additional_courses.*.units.*' => ['exists:units,id'],
                 'academic_histories' => ['nullable', 'array'],
                 'academic_histories.*.institution_name' => ['nullable', 'string', 'max:255'],
                 'academic_histories.*.qualification' => ['nullable', 'string', 'max:255'],
@@ -197,6 +215,7 @@ class StudentController extends Controller
                 // Remove non-column fields
                 unset($data['academic_histories']);
                 unset($data['units']);
+                unset($data['additional_courses']);
                 unset($data['academic_year_id']);
                 unset($data['semester_id']);
 
@@ -207,43 +226,32 @@ class StudentController extends Controller
                 $student = Student::create($data + ['user_id' => $user?->id]);
                 Log::info('ENROLLMENT - Student created:', $student->toArray());
 
-                // Create enrollments for selected units
-                if (!empty($validated['units'])) {
-                    $units = Unit::whereIn('id', $validated['units'])
-                        ->where('course_id', $validated['course_id'])
-                        ->where('is_active', true)
-                        ->get();
+                $this->createCourseRegistration(
+                    student: $student,
+                    courseId: (int) $validated['course_id'],
+                    classId: (int) $validated['class_id'],
+                    courseFee: $validated['course_fee'] ?? null,
+                    academicYearId: (int) $validated['academic_year_id'],
+                    semesterId: (int) $validated['semester_id'],
+                    userId: (int) $request->user()->id,
+                    unitIds: $validated['units'] ?? null,
+                );
 
-                    $registration = SemesterRegistration::create([
-                        'student_id' => $student->id,
-                        'class_id' => $validated['class_id'],
-                        'semester_id' => $validated['semester_id'],
-                        'academic_year_id' => $validated['academic_year_id'],
-                        'registered_at' => now(),
-                        'approved_at' => now(),
-                        'approved_by' => $request->user()->id,
-                        'status' => 'approved',
-                        'created_by' => $request->user()->id,
-                        'updated_by' => $request->user()->id,
-                    ]);
-
-                    Log::info('ENROLLMENT - Units to enroll:', ['unit_ids' => $validated['units'], 'count' => $units->count()]);
-
-                    foreach ($units as $unit) {
-                        $enrollment = Enrollment::create([
-                            'semester_registration_id' => $registration->id,
-                            'student_id' => $student->id,
-                            'unit_id' => $unit->id,
-                            'class_id' => $validated['class_id'],
-                            'semester_id' => $validated['semester_id'],
-                            'academic_year_id' => $validated['academic_year_id'],
-                            'enrolled_on' => now()->toDateString(),
-                            'status' => 'approved',
-                            'created_by' => $request->user()->id,
-                            'updated_by' => $request->user()->id,
-                        ]);
-                        Log::info('ENROLLMENT - Enrollment created:', $enrollment->toArray());
+                foreach ($validated['additional_courses'] ?? [] as $additionalCourse) {
+                    if ((int) $additionalCourse['course_id'] === (int) $validated['course_id']) {
+                        continue;
                     }
+
+                    $this->createCourseRegistration(
+                        student: $student,
+                        courseId: (int) $additionalCourse['course_id'],
+                        classId: (int) $additionalCourse['class_id'],
+                        courseFee: $additionalCourse['course_fee'] ?? null,
+                        academicYearId: (int) $validated['academic_year_id'],
+                        semesterId: (int) $validated['semester_id'],
+                        userId: (int) $request->user()->id,
+                        unitIds: $additionalCourse['units'] ?? null,
+                    );
                 }
 
                 // Add academic history
@@ -299,7 +307,7 @@ class StudentController extends Controller
     public function update(UpdateStudentRequest $request, Student $student): RedirectResponse
     {
         DB::transaction(function () use ($request, $student): void {
-            $data = $request->safe()->except(['photo', 'academic_histories']);
+            $data = $request->safe()->except(['photo', 'academic_histories', 'additional_courses', 'academic_year_id', 'semester_id']);
             $data['updated_by'] = $request->user()->id;
 
             if ($request->hasFile('photo')) {
@@ -319,6 +327,23 @@ class StudentController extends Controller
                     'created_by' => $request->user()->id,
                     'updated_by' => $request->user()->id,
                 ]));
+            }
+
+            foreach ($request->validated('additional_courses', []) as $additionalCourse) {
+                if ((int) $additionalCourse['course_id'] === (int) $student->course_id) {
+                    continue;
+                }
+
+                $this->createCourseRegistration(
+                    student: $student,
+                    courseId: (int) $additionalCourse['course_id'],
+                    classId: (int) $additionalCourse['class_id'],
+                    courseFee: $additionalCourse['course_fee'] ?? null,
+                    academicYearId: (int) $request->validated('academic_year_id'),
+                    semesterId: (int) $request->validated('semester_id'),
+                    userId: (int) $request->user()->id,
+                    unitIds: $additionalCourse['units'] ?? null,
+                );
             }
         });
 
@@ -347,11 +372,46 @@ class StudentController extends Controller
 
     private function studentTableData(Student $student): Student
     {
-        $courseFee = $student->course_fee !== null
-            ? (float) $student->course_fee
-            : (float) ($student->course?->fees ?? 0);
+        $registeredCourses = collect([
+            [
+                'id' => $student->course?->id,
+                'name' => $student->course?->name,
+                'code' => $student->course?->code,
+                'department_id' => $student->department_id,
+                'class_id' => $student->class_id,
+                'unit_ids' => $student->enrollments
+                    ->filter(fn (Enrollment $enrollment) => (int) $enrollment->unit?->course_id === (int) $student->course_id)
+                    ->pluck('unit_id')
+                    ->values(),
+                'fee' => $student->course_fee !== null
+                    ? (float) $student->course_fee
+                    : (float) ($student->course?->fees ?? 0),
+                'primary' => true,
+            ],
+        ])->merge($student->semesterRegistrations->map(function (SemesterRegistration $registration) use ($student) {
+            $course = $registration->class?->course;
+
+            return [
+                'id' => $course?->id,
+                'name' => $course?->name,
+                'code' => $course?->code,
+                'department_id' => $course?->department_id,
+                'class_id' => $registration->class_id,
+                'unit_ids' => $registration->enrollments->pluck('unit_id')->values(),
+                'fee' => $registration->course_fee !== null
+                    ? (float) $registration->course_fee
+                    : (float) ($course?->fees ?? 0),
+                'primary' => (int) $course?->id === (int) $student->course_id,
+            ];
+        }))
+            ->filter(fn (array $course) => $course['id'])
+            ->unique('id')
+            ->values();
+
+        $courseFee = (float) $registeredCourses->sum('fee');
         $paid = (float) $student->payments->sum('amount');
 
+        $student->setAttribute('registered_courses', $registeredCourses);
         $student->setAttribute('payment_summary', [
             'fee' => $courseFee,
             'paid' => $paid,
@@ -360,6 +420,75 @@ class StudentController extends Controller
         $student->unsetRelation('payments');
 
         return $student;
+    }
+
+    private function createCourseRegistration(
+        Student $student,
+        int $courseId,
+        int $classId,
+        mixed $courseFee,
+        int $academicYearId,
+        int $semesterId,
+        int $userId,
+        ?array $unitIds = null,
+    ): void {
+        $class = CollegeClass::whereKey($classId)
+            ->where('course_id', $courseId)
+            ->firstOrFail();
+
+        $registration = SemesterRegistration::where('student_id', $student->id)
+            ->where('semester_id', $semesterId)
+            ->where('academic_year_id', $academicYearId)
+            ->whereHas('class', fn ($query) => $query->where('course_id', $courseId))
+            ->first();
+
+        if ($registration) {
+            $registration->update([
+                'class_id' => $class->id,
+                'course_fee' => $courseFee !== null && $courseFee !== '' ? $courseFee : null,
+                'approved_at' => $registration->approved_at ?: now(),
+                'approved_by' => $registration->approved_by ?: $userId,
+                'status' => 'approved',
+                'updated_by' => $userId,
+            ]);
+            $registration->enrollments()->delete();
+        } else {
+            $registration = SemesterRegistration::create([
+                'student_id' => $student->id,
+                'class_id' => $class->id,
+                'course_fee' => $courseFee !== null && $courseFee !== '' ? $courseFee : null,
+                'semester_id' => $semesterId,
+                'academic_year_id' => $academicYearId,
+                'registered_at' => now(),
+                'approved_at' => now(),
+                'approved_by' => $userId,
+                'status' => 'approved',
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ]);
+        }
+
+        $unitsQuery = Unit::where('course_id', $courseId)
+            ->where('is_active', true);
+
+        if (is_array($unitIds)) {
+            $unitsQuery->whereIn('id', $unitIds);
+        }
+
+        foreach ($unitsQuery->get() as $unit) {
+            Enrollment::create([
+                'semester_registration_id' => $registration->id,
+                'student_id' => $student->id,
+                'unit_id' => $unit->id,
+                'class_id' => $class->id,
+                'semester_id' => $semesterId,
+                'academic_year_id' => $academicYearId,
+                'enrolled_on' => now()->toDateString(),
+                'status' => 'approved',
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ]);
+        }
     }
 
     private function getCurrentSemester()

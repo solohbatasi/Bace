@@ -17,6 +17,14 @@ class StoreStudentRequest extends FormRequest
                 'academic_histories' => is_array($decoded) ? $decoded : [],
             ]);
         }
+
+        if ($this->has('additional_courses') && is_string($this->input('additional_courses'))) {
+            $decoded = json_decode($this->input('additional_courses'), true);
+
+            $this->merge([
+                'additional_courses' => is_array($decoded) ? $decoded : [],
+            ]);
+        }
     }
 
     public function authorize(): bool
@@ -49,6 +57,15 @@ class StoreStudentRequest extends FormRequest
             'guardian_address' => ['nullable', 'string', 'max:2000'],
             'admitted_on' => ['required', 'date'],
             'status' => ['required', Rule::in(Student::STATUSES)],
+            'academic_year_id' => ['nullable', 'integer', Rule::exists('academic_years', 'id')],
+            'semester_id' => ['nullable', 'integer', Rule::exists('semesters', 'id')],
+            'additional_courses' => ['nullable', 'array'],
+            'additional_courses.*.department_id' => ['required_with:additional_courses', 'integer', Rule::exists('departments', 'id')],
+            'additional_courses.*.course_id' => ['required_with:additional_courses', 'integer', 'distinct', Rule::exists('courses', 'id')],
+            'additional_courses.*.class_id' => ['required_with:additional_courses', 'integer', Rule::exists('classes', 'id')],
+            'additional_courses.*.course_fee' => ['nullable', 'numeric', 'min:0'],
+            'additional_courses.*.units' => ['nullable', 'array'],
+            'additional_courses.*.units.*' => ['integer', Rule::exists('units', 'id')],
             'academic_histories' => ['array'],
             'academic_histories.*.institution_name' => ['required_with:academic_histories', 'string', 'max:255'],
             'academic_histories.*.qualification' => ['nullable', 'string', 'max:255'],

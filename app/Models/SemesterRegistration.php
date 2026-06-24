@@ -20,6 +20,7 @@ class SemesterRegistration extends Model
     protected $casts = [
         'registered_at' => 'datetime',
         'approved_at' => 'datetime',
+        'course_fee' => 'decimal:2',
     ];
 
     public function student(): BelongsTo

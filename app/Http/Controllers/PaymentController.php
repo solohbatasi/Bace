@@ -28,6 +28,8 @@ class PaymentController extends Controller
                 ->with([
                     'course:id,code,name,fees',
                     'enrollments.unit.course:id,code,name,fees',
+                    'semesterRegistrations:id,student_id,class_id,course_fee',
+                    'semesterRegistrations.class:id,course_id',
                     'semesterRegistrations.class.course:id,code,name,fees',
                     'payments:id,student_id,course_id,amount,status',
                 ])
@@ -113,9 +115,13 @@ class PaymentController extends Controller
             ->unique('id')
             ->values()
             ->map(function ($course) use ($paidByCourse, $student) {
-                $fees = (int) $course->id === (int) $student->course_id && $student->course_fee !== null
-                    ? (float) $student->course_fee
-                    : (float) $course->fees;
+                $registration = $student->semesterRegistrations
+                    ->first(fn ($registration) => (int) $registration->class?->course_id === (int) $course->id);
+                $fees = match (true) {
+                    (int) $course->id === (int) $student->course_id && $student->course_fee !== null => (float) $student->course_fee,
+                    $registration?->course_fee !== null => (float) $registration->course_fee,
+                    default => (float) $course->fees,
+                };
 
                 return [
                     'id' => $course->id,

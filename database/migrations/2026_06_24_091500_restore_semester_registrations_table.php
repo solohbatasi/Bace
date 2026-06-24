@@ -38,10 +38,10 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_class
-        WHERE relname = 'semester_registrations_student_term_active_unique'
+        WHERE relname = 'semester_registrations_student_class_term_active_unique'
     ) THEN
-        CREATE UNIQUE INDEX semester_registrations_student_term_active_unique
-        ON semester_registrations (student_id, semester_id, academic_year_id)
+        CREATE UNIQUE INDEX semester_registrations_student_class_term_active_unique
+        ON semester_registrations (student_id, class_id, semester_id, academic_year_id)
         WHERE deleted_at IS NULL;
     END IF;
 END

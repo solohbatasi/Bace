@@ -22,6 +22,8 @@ class UpdateStudentRequest extends StoreStudentRequest
             'last_name' => ['sometimes', 'required', 'string', 'max:100'],
             'admitted_on' => ['sometimes', 'required', 'date'],
             'status' => ['sometimes', 'required', Rule::in(Student::STATUSES)],
+            'academic_year_id' => ['required_with:additional_courses', 'nullable', 'integer', Rule::exists('academic_years', 'id')],
+            'semester_id' => ['required_with:additional_courses', 'nullable', 'integer', Rule::exists('semesters', 'id')],
         ]);
     }
 }
