@@ -372,6 +372,10 @@ class StudentController extends Controller
 
     private function studentTableData(Student $student): Student
     {
+        $paidByCourse = $student->payments
+            ->groupBy('course_id')
+            ->map(fn ($payments) => (float) $payments->sum('amount'));
+
         $registeredCourses = collect([
             [
                 'id' => $student->course?->id,
@@ -406,16 +410,36 @@ class StudentController extends Controller
         }))
             ->filter(fn (array $course) => $course['id'])
             ->unique('id')
-            ->values();
+            ->values()
+            ->map(function (array $course) use ($paidByCourse) {
+                $paid = (float) ($paidByCourse[$course['id']] ?? 0);
+
+                return [
+                    ...$course,
+                    'paid' => $paid,
+                    'remaining' => max((float) $course['fee'] - $paid, 0),
+                ];
+            });
 
         $courseFee = (float) $registeredCourses->sum('fee');
-        $paid = (float) $student->payments->sum('amount');
+        $paid = (float) $registeredCourses->sum('paid');
+        $remaining = (float) $registeredCourses->sum('remaining');
 
         $student->setAttribute('registered_courses', $registeredCourses);
         $student->setAttribute('payment_summary', [
             'fee' => $courseFee,
             'paid' => $paid,
-            'remaining' => max($courseFee - $paid, 0),
+            'remaining' => $remaining,
+            'courses_count' => $registeredCourses->count(),
+            'by_course' => $registeredCourses->map(fn (array $course) => [
+                'course_id' => $course['id'],
+                'code' => $course['code'],
+                'name' => $course['name'],
+                'fee' => $course['fee'],
+                'paid' => $course['paid'],
+                'remaining' => $course['remaining'],
+                'primary' => $course['primary'],
+            ])->values(),
         ]);
         $student->unsetRelation('payments');
 

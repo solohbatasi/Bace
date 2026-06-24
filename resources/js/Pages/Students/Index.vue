@@ -702,7 +702,10 @@ const exportCsv = () => {
                         </td>
                         <td class="px-5 py-4">
                             <p class="font-semibold text-amber-500">{{ money(student.payment_summary?.remaining) }}</p>
-                            <p class="text-xs text-gray-500">Paid {{ money(student.payment_summary?.paid) }}</p>
+                            <p class="text-xs text-gray-500">Paid {{ money(student.payment_summary?.paid) }} of {{ money(student.payment_summary?.fee) }}</p>
+                            <p v-if="student.payment_summary?.courses_count > 1" class="text-[11px] text-gray-400">
+                                Across {{ student.payment_summary.courses_count }} courses
+                            </p>
                         </td>
                         <td class="px-5 py-4">
                             <span
