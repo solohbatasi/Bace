@@ -33,7 +33,14 @@ class StudentController extends Controller
 
         return Inertia::render('Students/Index', [
             'students' => Student::query()
-                ->with(['department:id,name,code', 'course:id,name,code,fees', 'class:id,name,code'])
+                ->with([
+                    'department:id,name,code',
+                    'course:id,name,code,fees',
+                    'class:id,name,code',
+                    'payments' => fn ($query) => $query
+                        ->where('status', 'confirmed')
+                        ->select(['id', 'student_id', 'course_id', 'amount', 'status']),
+                ])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('admission_number', 'like', "%{$search}%")
                     ->orWhere('first_name', 'like', "%{$search}%")
@@ -43,8 +50,9 @@ class StudentController extends Controller
                 ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where('course_id', $courseId))
                 ->when($filters['class_id'] ?? null, fn ($query, $classId) => $query->where('class_id', $classId))
                 ->latest()
-                ->paginate(12)
-                ->withQueryString(),
+                ->paginate(20)
+                ->withQueryString()
+                ->through(fn (Student $student) => $this->studentTableData($student)),
             'filters' => $filters,
             'statuses' => Student::STATUSES,
             'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'fees']),
@@ -335,6 +343,23 @@ class StudentController extends Controller
             'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'department_id', 'fees']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
         ];
+    }
+
+    private function studentTableData(Student $student): Student
+    {
+        $courseFee = $student->course_fee !== null
+            ? (float) $student->course_fee
+            : (float) ($student->course?->fees ?? 0);
+        $paid = (float) $student->payments->sum('amount');
+
+        $student->setAttribute('payment_summary', [
+            'fee' => $courseFee,
+            'paid' => $paid,
+            'remaining' => max($courseFee - $paid, 0),
+        ]);
+        $student->unsetRelation('payments');
+
+        return $student;
     }
 
     private function getCurrentSemester()

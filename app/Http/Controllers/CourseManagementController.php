@@ -33,7 +33,7 @@ class CourseManagementController extends Controller
                     ->orWhere('name', 'like', "%{$search}%")))
                 ->when($filters['department_id'] ?? null, fn ($query, $department) => $query->where('department_id', $department))
                 ->latest()
-                ->paginate(10)
+                ->paginate(20)
                 ->withQueryString(),
             'filters' => $filters,
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),

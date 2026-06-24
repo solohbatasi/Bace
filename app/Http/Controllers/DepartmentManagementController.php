@@ -26,7 +26,7 @@ class DepartmentManagementController extends Controller
                     ->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%")))
                 ->orderBy('name')
-                ->paginate(10)
+                ->paginate(20)
                 ->withQueryString(),
             'departmentOptions' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'lecturerOptions' => Lecturer::orderBy('last_name')->get(['id', 'title', 'first_name', 'last_name']),

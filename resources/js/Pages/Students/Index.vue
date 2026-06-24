@@ -135,6 +135,8 @@ const dateInputValue = (value) => {
     return String(value).slice(0, 10);
 };
 
+const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
+
 const showingEnrollmentModal = ref(false);
 const deletingStudent = ref(null);
 const selectedUnits = ref([]);
@@ -549,6 +551,7 @@ const exportCsv = () => {
                         <th class="px-5 py-3">Department</th>
                         <th class="px-5 py-3">Course</th>
                         <th class="px-5 py-3">Class</th>
+                        <th class="px-5 py-3">Payments</th>
                         <th class="px-5 py-3">Status</th>
                         <th class="px-5 py-3 text-right">Actions</th>
                     </tr>
@@ -583,6 +586,10 @@ const exportCsv = () => {
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             {{ student.class?.name || 'Not assigned' }}
+                        </td>
+                        <td class="px-5 py-4">
+                            <p class="font-semibold text-amber-500">{{ money(student.payment_summary?.remaining) }}</p>
+                            <p class="text-xs text-gray-500">Paid {{ money(student.payment_summary?.paid) }}</p>
                         </td>
                         <td class="px-5 py-4">
                             <span

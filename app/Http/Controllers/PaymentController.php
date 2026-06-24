@@ -47,7 +47,7 @@ class PaymentController extends Controller
                 ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where('course_id', $courseId))
                 ->latest('payment_date')
                 ->latest()
-                ->paginate(10)
+                ->paginate(20)
                 ->withQueryString(),
             'summary' => [
                 'total_paid' => Payment::where('status', 'confirmed')->sum('amount'),

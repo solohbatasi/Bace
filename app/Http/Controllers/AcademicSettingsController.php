@@ -25,19 +25,24 @@ class AcademicSettingsController extends Controller
             'academicYears' => AcademicYear::query()
                 ->withCount(['semesters'])
                 ->orderByDesc('starts_on')
-                ->get(['id', 'name', 'starts_on', 'ends_on', 'is_current']),
+                ->paginate(20, ['id', 'name', 'starts_on', 'ends_on', 'is_current'], 'academic_years_page')
+                ->withQueryString(),
             'semesters' => Semester::query()
                 ->with('academicYear:id,name')
                 ->orderByDesc('starts_on')
-                ->get(['id', 'academic_year_id', 'name', 'sequence', 'starts_on', 'ends_on', 'is_current']),
+                ->paginate(20, ['id', 'academic_year_id', 'name', 'sequence', 'starts_on', 'ends_on', 'is_current'], 'semesters_page')
+                ->withQueryString(),
             'classes' => CollegeClass::query()
                 ->with(['course:id,code,name', 'department:id,code,name', 'academicYear:id,name', 'semester:id,name', 'classLecturer:id,title,first_name,last_name'])
                 ->withCount('students')
                 ->orderByDesc('created_at')
-                ->get(['id', 'course_id', 'department_id', 'academic_year_id', 'semester_id', 'class_lecturer_id', 'code', 'name', 'year_level', 'capacity', 'is_active']),
+                ->paginate(20, ['id', 'course_id', 'department_id', 'academic_year_id', 'semester_id', 'class_lecturer_id', 'code', 'name', 'year_level', 'capacity', 'is_active'], 'classes_page')
+                ->withQueryString(),
             'courses' => Course::orderBy('name')->get(['id', 'department_id', 'code', 'name']),
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'lecturers' => Lecturer::orderBy('last_name')->get(['id', 'department_id', 'title', 'first_name', 'last_name']),
+            'academicYearOptions' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
+            'semesterOptions' => Semester::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
         ]);
     }
 
