@@ -2,12 +2,14 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
 const props = defineProps({ lecturers: Object, departments: Array, filters: Object });
 
 const showingModal = ref(false);
+const deletingLecturer = ref(null);
 const filter = reactive({ search: props.filters.search || '', department_id: props.filters.department_id || '', status: props.filters.status || '' });
 const form = useForm({ id: null, department_id: '', staff_number: '', title: '', first_name: '', middle_name: '', last_name: '', email: '', phone: '', hired_on: '', employment_status: 'active' });
 
@@ -62,7 +64,18 @@ const save = () => {
     form.id ? form.put(route('academics.lecturers.update', form.id), options) : form.post(route('academics.lecturers.store'), options);
 };
 const destroyLecturer = (lecturer) => {
-    if (confirm(`Delete ${lecturer.first_name} ${lecturer.last_name}?`)) router.delete(route('academics.lecturers.destroy', lecturer.id), { preserveScroll: true });
+    deletingLecturer.value = lecturer;
+};
+const closeDeleteModal = () => {
+    deletingLecturer.value = null;
+};
+const confirmDeleteLecturer = () => {
+    if (!deletingLecturer.value) return;
+
+    router.delete(route('academics.lecturers.destroy', deletingLecturer.value.id), {
+        preserveScroll: true,
+        onSuccess: closeDeleteModal,
+    });
 };
 </script>
 
@@ -211,5 +224,19 @@ const destroyLecturer = (lecturer) => {
                 <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="lecturer-crud-form" type="submit" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save lecturer' }}</button>
             </template>
         </DialogModal>
+
+        <ConfirmationModal :show="Boolean(deletingLecturer)" max-width="md" @close="closeDeleteModal">
+            <template #title>Delete lecturer</template>
+            <template #content>
+                <p>
+                    Delete <span class="font-semibold text-gray-900 dark:text-white">{{ deletingLecturer?.title }} {{ deletingLecturer?.first_name }} {{ deletingLecturer?.last_name }}</span>?
+                </p>
+                <p class="mt-2">Unit assignments or class records linked to this lecturer may prevent deletion.</p>
+            </template>
+            <template #footer>
+                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeDeleteModal">Cancel</button>
+                <button class="rounded-md bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400" type="button" @click="confirmDeleteLecturer">Delete lecturer</button>
+            </template>
+        </ConfirmationModal>
     </AppLayout>
 </template>

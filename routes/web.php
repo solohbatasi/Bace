@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\AcademicSettingsController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SystemHealthController;
@@ -53,6 +54,17 @@ Route::middleware([
     Route::post('students/enroll', [StudentController::class, 'enroll'])->name('students.enroll')->middleware('permission:students.view');
 
     Route::prefix('academics')->name('academics.')->group(function () {
+        Route::get('settings', [AcademicSettingsController::class, 'index'])->name('settings.index');
+        Route::post('settings/academic-years', [AcademicSettingsController::class, 'storeAcademicYear'])->name('settings.academic-years.store');
+        Route::put('settings/academic-years/{academicYear}', [AcademicSettingsController::class, 'updateAcademicYear'])->name('settings.academic-years.update');
+        Route::delete('settings/academic-years/{academicYear}', [AcademicSettingsController::class, 'destroyAcademicYear'])->name('settings.academic-years.destroy');
+        Route::post('settings/semesters', [AcademicSettingsController::class, 'storeSemester'])->name('settings.semesters.store');
+        Route::put('settings/semesters/{semester}', [AcademicSettingsController::class, 'updateSemester'])->name('settings.semesters.update');
+        Route::delete('settings/semesters/{semester}', [AcademicSettingsController::class, 'destroySemester'])->name('settings.semesters.destroy');
+        Route::post('settings/classes', [AcademicSettingsController::class, 'storeClass'])->name('settings.classes.store');
+        Route::put('settings/classes/{class}', [AcademicSettingsController::class, 'updateClass'])->name('settings.classes.update');
+        Route::delete('settings/classes/{class}', [AcademicSettingsController::class, 'destroyClass'])->name('settings.classes.destroy');
+
         Route::get('courses', [CourseManagementController::class, 'index'])->name('courses.index');
         Route::post('courses', [CourseManagementController::class, 'storeCourse'])->name('courses.store');
         Route::put('courses/{course}', [CourseManagementController::class, 'updateCourse'])->name('courses.update');

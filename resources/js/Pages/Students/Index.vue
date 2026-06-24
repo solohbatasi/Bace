@@ -16,6 +16,8 @@ const props = defineProps({
     courses: Array,
     classes: Array,
     departments: Array,
+    academicYears: Array,
+    semesters: Array,
 });
 
 const filter = reactive({
@@ -30,6 +32,8 @@ const studentForm = useForm({
     department_id: '',
     course_id: '',
     class_id: '',
+    academic_year_id: props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '',
+    semester_id: props.semesters.find((semester) => semester.is_current)?.id || props.semesters[0]?.id || '',
     admission_number: '',
     first_name: '',
     middle_name: '',
@@ -102,6 +106,11 @@ const filteredClasses = computed(() => {
     );
 });
 
+const filteredSemesters = computed(() => {
+    if (!studentForm.academic_year_id) return props.semesters;
+    return props.semesters.filter((semester) => semester.academic_year_id === studentForm.academic_year_id);
+});
+
 // Get selected item labels
 const selectedDepartmentLabel = computed(() => {
     const dept = props.departments.find(d => d.id === studentForm.department_id);
@@ -145,6 +154,8 @@ const resetStudentForm = () => {
     studentForm.reset();
     studentForm.id = null;
     studentForm.status = 'active';
+    studentForm.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '';
+    studentForm.semester_id = props.semesters.find((semester) => semester.is_current)?.id || props.semesters[0]?.id || '';
     studentForm.academic_histories = [];
     studentForm.photo = null;
     studentForm.photo_preview = null;
@@ -175,6 +186,8 @@ const editStudent = (student) => {
     studentForm.department_id = student.department_id;
     studentForm.course_id = student.course_id;
     studentForm.class_id = student.class_id;
+    studentForm.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '';
+    studentForm.semester_id = props.semesters.find((semester) => semester.is_current)?.id || props.semesters[0]?.id || '';
     studentForm.admission_number = student.admission_number;
     studentForm.first_name = student.first_name;
     studentForm.middle_name = student.middle_name || '';
@@ -256,6 +269,12 @@ watch(() => studentForm.course_id, (newCourseId) => {
     } else if (!newCourseId) {
         courseUnits.value = [];
         selectedUnits.value = [];
+    }
+});
+
+watch(() => studentForm.academic_year_id, () => {
+    if (!filteredSemesters.value.some((semester) => semester.id === studentForm.semester_id)) {
+        studentForm.semester_id = filteredSemesters.value[0]?.id || '';
     }
 });
 
@@ -761,6 +780,22 @@ const exportCsv = () => {
                                 </div>
                             </div>
 
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Academic Year</label>
+                                <select v-model="studentForm.academic_year_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                                    <option value="">Select academic year</option>
+                                    <option v-for="year in academicYears" :key="year.id" :value="year.id">{{ year.name }}</option>
+                                </select>
+                                <p v-if="studentForm.errors.academic_year_id" class="mt-1 text-xs text-red-400">{{ studentForm.errors.academic_year_id }}</p>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Semester</label>
+                                <select v-model="studentForm.semester_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                                    <option value="">Select semester</option>
+                                    <option v-for="semester in filteredSemesters" :key="semester.id" :value="semester.id">{{ semester.name }}</option>
+                                </select>
+                                <p v-if="studentForm.errors.semester_id" class="mt-1 text-xs text-red-400">{{ studentForm.errors.semester_id }}</p>
+                            </div>
                             <div>
                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Admission Number</label>
                                 <input v-model="studentForm.admission_number" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Auto-generate if empty">

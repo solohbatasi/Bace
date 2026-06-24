@@ -27,6 +27,21 @@ class CollegeClass extends Model
         return $this->belongsTo(Department::class);
     }
 
+    public function academicYear(): BelongsTo
+    {
+        return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function semester(): BelongsTo
+    {
+        return $this->belongsTo(Semester::class);
+    }
+
+    public function classLecturer(): BelongsTo
+    {
+        return $this->belongsTo(Lecturer::class, 'class_lecturer_id');
+    }
+
     public function students(): HasMany
     {
         return $this->hasMany(Student::class, 'class_id');

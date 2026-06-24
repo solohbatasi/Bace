@@ -8,7 +8,9 @@ use App\Models\AcademicYear;
 use App\Models\CollegeClass;
 use App\Models\Course;
 use App\Models\Department;
+use App\Models\Enrollment;
 use App\Models\Semester;
+use App\Models\SemesterRegistration;
 use App\Models\Student;
 use App\Models\Unit;
 use Illuminate\Http\RedirectResponse;
@@ -45,6 +47,8 @@ class StudentController extends Controller
             'courses' => Course::orderBy('name')->get(['id', 'name', 'code']),
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
+            'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
+            'semesters' => Semester::orderByDesc('starts_on')->get(['id', 'academic_year_id', 'name', 'sequence', 'is_current']),
         ]);
     }
 
@@ -99,7 +103,8 @@ public function enroll(Request $request): RedirectResponse
             'first_name', 'middle_name', 'last_name', 'gender', 'date_of_birth',
             'email', 'phone', 'address', 'guardian_name',
             'guardian_relationship', 'guardian_phone', 'guardian_email',
-            'guardian_address', 'admitted_on', 'status', 'units', 'academic_histories'
+            'guardian_address', 'admitted_on', 'status', 'academic_year_id',
+            'semester_id', 'units', 'academic_histories'
         ];
 
         $data = array_intersect_key($data, array_flip($allowedKeys));
@@ -127,7 +132,17 @@ public function enroll(Request $request): RedirectResponse
         $validated = $request->validate([
             'department_id' => ['required', 'exists:departments,id'],
             'course_id' => ['required', 'exists:courses,id'],
-            'class_id' => ['nullable', 'exists:classes,id'],
+            'class_id' => [
+                'required',
+                Rule::exists('classes', 'id')
+                    ->where('course_id', $request->input('course_id'))
+                    ->where('academic_year_id', $request->input('academic_year_id')),
+            ],
+            'academic_year_id' => ['required', 'exists:academic_years,id'],
+            'semester_id' => [
+                'required',
+                Rule::exists('semesters', 'id')->where('academic_year_id', $request->input('academic_year_id')),
+            ],
             'admission_number' => ['nullable', 'string', 'max:50'],
             'first_name' => ['required', 'string', 'max:100'],
             'middle_name' => ['nullable', 'string', 'max:100'],
@@ -173,6 +188,8 @@ public function enroll(Request $request): RedirectResponse
             // Remove non-column fields
             unset($data['academic_histories']);
             unset($data['units']);
+            unset($data['academic_year_id']);
+            unset($data['semester_id']);
 
             Log::info('ENROLLMENT - Data before student create:', $data);
 
@@ -182,21 +199,36 @@ public function enroll(Request $request): RedirectResponse
 
             // Create enrollments for selected units
             if (!empty($validated['units'])) {
-                $units = Unit::whereIn('id', $validated['units'])->get();
-                $currentSemester = $this->getCurrentSemester();
-                $currentAcademicYear = $this->getCurrentAcademicYear();
+                $units = Unit::whereIn('id', $validated['units'])
+                    ->where('course_id', $validated['course_id'])
+                    ->where('is_active', true)
+                    ->get();
+
+                $registration = SemesterRegistration::create([
+                    'student_id' => $student->id,
+                    'class_id' => $validated['class_id'],
+                    'semester_id' => $validated['semester_id'],
+                    'academic_year_id' => $validated['academic_year_id'],
+                    'registered_at' => now(),
+                    'approved_at' => now(),
+                    'approved_by' => $request->user()->id,
+                    'status' => 'approved',
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]);
 
                 Log::info('ENROLLMENT - Units to enroll:', ['unit_ids' => $validated['units'], 'count' => $units->count()]);
 
                 foreach ($units as $unit) {
-                    // Remove course_id and department_id from enrollment creation
-                    $enrollment = $student->enrollments()->create([
+                    $enrollment = Enrollment::create([
+                        'semester_registration_id' => $registration->id,
+                        'student_id' => $student->id,
                         'unit_id' => $unit->id,
-                        // 'course_id' => $validated['course_id'], // REMOVED - column doesn't exist
-                        // 'department_id' => $validated['department_id'], // REMOVED - column doesn't exist
-                        // 'semester_id' => $currentSemester?->id,
-                        // 'academic_year_id' => $currentAcademicYear?->id,
-                        // 'is_active' => true,
+                        'class_id' => $validated['class_id'],
+                        'semester_id' => $validated['semester_id'],
+                        'academic_year_id' => $validated['academic_year_id'],
+                        'enrolled_on' => now()->toDateString(),
+                        'status' => 'approved',
                         'created_by' => $request->user()->id,
                         'updated_by' => $request->user()->id,
                     ]);
