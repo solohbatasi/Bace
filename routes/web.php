@@ -13,6 +13,7 @@ use App\Http\Controllers\CourseManagementController;
 use App\Http\Controllers\DepartmentManagementController;
 use App\Http\Controllers\EnrollmentManagementController;
 use App\Http\Controllers\LecturerManagementController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnitManagementController;
 use App\Models\Course;
@@ -52,6 +53,13 @@ Route::middleware([
     // Student routes - ADD THE ENROLL ROUTE HERE
     Route::resource('students', StudentController::class)->middleware('permission:students.view');
     Route::post('students/enroll', [StudentController::class, 'enroll'])->name('students.enroll')->middleware('permission:students.view');
+
+    Route::prefix('finance')->name('finance.')->group(function () {
+        Route::get('payments', [PaymentController::class, 'index'])->name('payments.index')->middleware('permission:finance.view');
+        Route::post('payments', [PaymentController::class, 'store'])->name('payments.store')->middleware('permission:finance.manage');
+        Route::put('payments/{payment}', [PaymentController::class, 'update'])->name('payments.update')->middleware('permission:finance.manage');
+        Route::delete('payments/{payment}', [PaymentController::class, 'destroy'])->name('payments.destroy')->middleware('permission:finance.manage');
+    });
 
     Route::prefix('academics')->name('academics.')->group(function () {
         Route::get('settings', [AcademicSettingsController::class, 'index'])->name('settings.index');

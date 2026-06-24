@@ -21,6 +21,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/auth/profile', [AuthController::class, 'updateProfile']);
 
     Route::apiResource('students', StudentController::class)
+        ->names('api.students')
         ->middleware('permission:students.view')
         ->except(['store', 'update', 'destroy']);
     Route::post('students', [StudentController::class, 'store'])->middleware('permission:students.create');
