@@ -7,6 +7,7 @@ use App\Models\Student;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -64,15 +65,26 @@ class PaymentController extends Controller
         abort_unless($request->user()->hasPermission('finance.manage'), 403);
 
         $data = $this->paymentData($request);
-        $data['payment_reference'] = $data['payment_reference'] ?: $this->nextReference();
+        $allocations = $this->paymentAllocations($request, $data);
 
-        Payment::create($data + [
-            'currency' => 'KES',
-            'created_by' => $request->user()->id,
-            'updated_by' => $request->user()->id,
-        ]);
+        DB::transaction(function () use ($allocations, $data, $request): void {
+            $baseReference = $data['payment_reference'] ?: $this->nextReference();
+            $count = count($allocations);
 
-        return back()->with('flash.banner', 'Payment recorded.');
+            foreach ($allocations as $index => $allocation) {
+                Payment::create([
+                    ...$data,
+                    'course_id' => $allocation['course_id'],
+                    'amount' => $allocation['amount'],
+                    'payment_reference' => $this->allocationReference($baseReference, $index, $count),
+                    'currency' => 'KES',
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]);
+            }
+        });
+
+        return back()->with('flash.banner', count($allocations) > 1 ? 'Split payment recorded.' : 'Payment recorded.');
     }
 
     public function update(Request $request, Payment $payment): RedirectResponse
@@ -155,7 +167,7 @@ class PaymentController extends Controller
     {
         $data = $request->validate([
             'student_id' => ['required', 'exists:students,id'],
-            'course_id' => ['required', 'exists:courses,id'],
+            'course_id' => [Rule::requiredIf(! $request->filled('allocations')), 'nullable', 'exists:courses,id'],
             'payment_reference' => ['nullable', 'max:80', Rule::unique('payments')->ignore($payment)->whereNull('deleted_at')],
             'payment_date' => ['required', 'date'],
             'method' => ['required', 'max:40'],
@@ -166,13 +178,76 @@ class PaymentController extends Controller
         ]);
 
         $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations.class:id,course_id'])->findOrFail($data['student_id']);
-        if (! $this->studentCourseIds($student)->contains((int) $data['course_id'])) {
+        if (($data['course_id'] ?? null) && ! $this->studentCourseIds($student)->contains((int) $data['course_id'])) {
             throw ValidationException::withMessages([
                 'course_id' => 'The selected learner is not enrolled in that course.',
             ]);
         }
 
         return $data;
+    }
+
+    private function paymentAllocations(Request $request, array $data): array
+    {
+        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations.class:id,course_id'])->findOrFail($data['student_id']);
+        $allowedCourseIds = $this->studentCourseIds($student);
+
+        $hasAllocationRows = collect($request->input('allocations', []))->isNotEmpty();
+        $allocations = collect($request->input('allocations', []))
+            ->filter(fn ($allocation) => (float) ($allocation['amount'] ?? 0) > 0)
+            ->map(fn ($allocation) => [
+                'course_id' => (int) ($allocation['course_id'] ?? 0),
+                'amount' => (float) ($allocation['amount'] ?? 0),
+            ])
+            ->values();
+
+        if ($allocations->isEmpty()) {
+            if ($hasAllocationRows) {
+                throw ValidationException::withMessages([
+                    'allocations' => 'Enter at least one course amount for this split payment.',
+                ]);
+            }
+
+            return [[
+                'course_id' => (int) $data['course_id'],
+                'amount' => (float) $data['amount'],
+            ]];
+        }
+
+        $invalidCourse = $allocations->first(fn ($allocation) => ! $allowedCourseIds->contains($allocation['course_id']));
+        if ($invalidCourse) {
+            throw ValidationException::withMessages([
+                'allocations' => 'One of the selected courses does not belong to this learner.',
+            ]);
+        }
+
+        if ($allocations->pluck('course_id')->duplicates()->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'allocations' => 'Each course can only appear once in a split payment.',
+            ]);
+        }
+
+        $allocatedTotal = round((float) $allocations->sum('amount'), 2);
+        if ($allocatedTotal !== round((float) $data['amount'], 2)) {
+            throw ValidationException::withMessages([
+                'amount' => 'The split amounts must add up to the total payment amount.',
+            ]);
+        }
+
+        return $allocations->all();
+    }
+
+    private function allocationReference(string $baseReference, int $index, int $count): string
+    {
+        $reference = $count > 1
+            ? substr($baseReference, 0, 76).'-'.($index + 1)
+            : $baseReference;
+
+        if (! Payment::where('payment_reference', $reference)->exists()) {
+            return $reference;
+        }
+
+        return $this->nextReference();
     }
 
     private function nextReference(): string

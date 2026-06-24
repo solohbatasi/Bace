@@ -32,6 +32,7 @@ const paymentForm = useForm({
     payment_date: props.paymentDate,
     method: 'cash',
     amount: '',
+    allocations: [],
     status: 'confirmed',
     notes: '',
 });
@@ -45,6 +46,9 @@ const studentSelect = reactive({
 
 const selectedStudent = computed(() => props.students.find((student) => Number(student.id) === Number(paymentForm.student_id)));
 const selectedCourse = computed(() => selectedStudent.value?.courses.find((course) => Number(course.id) === Number(paymentForm.course_id)));
+const canSplitPayment = computed(() => !paymentForm.id && (selectedStudent.value?.courses.length || 0) > 1);
+const allocationTotal = computed(() => paymentForm.allocations.reduce((total, allocation) => total + Number(allocation.amount || 0), 0));
+const allocationRemaining = computed(() => Number(paymentForm.amount || 0) - allocationTotal.value);
 const selectedStudentLabel = computed(() => selectedStudent.value ? `${selectedStudent.value.admission_number} - ${selectedStudent.value.name}` : 'Select learner');
 const filteredStudents = computed(() => {
     const search = studentSelect.search.toLowerCase();
@@ -104,10 +108,14 @@ watch(filter, () => router.get(route('finance.payments.index'), filter, { preser
 watch(() => paymentForm.student_id, () => {
     paymentForm.course_id = '';
     paymentForm.amount = '';
+    paymentForm.allocations = selectedStudent.value?.courses.map((course) => ({
+        course_id: course.id,
+        amount: '',
+    })) || [];
 });
 
 watch(() => paymentForm.course_id, () => {
-    if (selectedCourse.value && !paymentForm.id) {
+    if (selectedCourse.value && !paymentForm.id && !canSplitPayment.value) {
         paymentForm.amount = selectedCourse.value.balance || selectedCourse.value.fees || '';
     }
 });
@@ -125,6 +133,7 @@ const resetPaymentForm = () => {
     paymentForm.payment_date = props.paymentDate;
     paymentForm.method = 'cash';
     paymentForm.amount = '';
+    paymentForm.allocations = [];
     paymentForm.status = 'confirmed';
     paymentForm.notes = '';
     studentSelect.search = '';
@@ -148,6 +157,7 @@ const editPayment = async (payment) => {
     paymentForm.payment_date = payment.payment_date;
     paymentForm.method = payment.method;
     paymentForm.amount = payment.amount;
+    paymentForm.allocations = [];
     paymentForm.status = payment.status;
     paymentForm.notes = payment.notes || '';
 };
@@ -160,6 +170,12 @@ const closePaymentModal = () => {
 const savePayment = () => {
     const options = { preserveScroll: true, onSuccess: closePaymentModal };
     paymentForm.id ? paymentForm.put(route('finance.payments.update', paymentForm.id), options) : paymentForm.post(route('finance.payments.store'), options);
+};
+
+const splitCourse = (allocation) => selectedStudent.value?.courses.find((course) => Number(course.id) === Number(allocation.course_id));
+
+const fillAllocationBalance = (allocation) => {
+    allocation.amount = splitCourse(allocation)?.balance || '';
 };
 
 const destroyPayment = (payment) => {
@@ -588,7 +604,7 @@ const exportCsv = () => {
                         </div>
                         <p v-if="paymentForm.errors.student_id" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.student_id }}</p>
                     </div>
-                    <div>
+                    <div v-if="!canSplitPayment">
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course paid for</label>
                         <select v-model="paymentForm.course_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!selectedStudent" required>
                             <option value="">{{ selectedStudent ? 'Select course' : 'Select learner first' }}</option>
@@ -596,7 +612,7 @@ const exportCsv = () => {
                         </select>
                         <p v-if="paymentForm.errors.course_id" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.course_id }}</p>
                     </div>
-                    <div v-if="selectedCourse" class="grid grid-cols-3 gap-2 rounded-md border border-gray-200 p-3 text-xs md:col-span-2 dark:border-[#2a3040]">
+                    <div v-if="selectedCourse && !canSplitPayment" class="grid grid-cols-3 gap-2 rounded-md border border-gray-200 p-3 text-xs md:col-span-2 dark:border-[#2a3040]">
                         <div>
                             <p class="text-gray-500">Fees</p>
                             <p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ money(selectedCourse.fees) }}</p>
@@ -611,9 +627,41 @@ const exportCsv = () => {
                         </div>
                     </div>
                     <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Amount</label>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">{{ canSplitPayment ? 'Total Amount Received' : 'Amount' }}</label>
                         <input v-model="paymentForm.amount" type="number" min="1" step="0.01" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
                         <p v-if="paymentForm.errors.amount" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.amount }}</p>
+                    </div>
+                    <div v-if="canSplitPayment" class="md:col-span-2 rounded-md border border-gray-200 p-3 dark:border-[#2a3040]">
+                        <div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                            <div>
+                                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Split by Course</h3>
+                                <p class="text-xs text-gray-500">Enter how much of this payment belongs to each course.</p>
+                            </div>
+                            <div class="text-xs sm:text-right">
+                                <p class="font-semibold text-emerald-500">Allocated {{ money(allocationTotal) }}</p>
+                                <p :class="Math.abs(allocationRemaining) < 0.01 ? 'text-gray-500' : 'text-amber-500'">
+                                    Remaining {{ money(allocationRemaining) }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-3 space-y-2">
+                            <div v-for="allocation in paymentForm.allocations" :key="allocation.course_id" class="grid gap-2 rounded-md bg-gray-50 p-3 text-sm md:grid-cols-[1fr_140px_auto] md:items-center dark:bg-[#151a25]">
+                                <div>
+                                    <p class="font-semibold text-gray-800 dark:text-white">{{ splitCourse(allocation)?.name }}</p>
+                                    <p class="text-xs text-gray-500">
+                                        {{ splitCourse(allocation)?.code }} |
+                                        Fee {{ money(splitCourse(allocation)?.fees) }} |
+                                        Paid {{ money(splitCourse(allocation)?.paid) }} |
+                                        Balance {{ money(splitCourse(allocation)?.balance) }}
+                                    </p>
+                                </div>
+                                <input v-model="allocation.amount" type="number" min="0" step="0.01" class="w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Amount">
+                                <button type="button" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 transition hover:border-violet-400 dark:border-[#2a3040] dark:text-gray-300" @click="fillAllocationBalance(allocation)">
+                                    Balance
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="paymentForm.errors.allocations" class="mt-2 text-xs text-red-400">{{ paymentForm.errors.allocations }}</p>
                     </div>
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Payment date</label>
