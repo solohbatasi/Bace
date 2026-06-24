@@ -9,13 +9,16 @@ use App\Models\CollegeClass;
 use App\Models\Course;
 use App\Models\Department;
 use App\Models\Enrollment;
+use App\Models\Role;
 use App\Models\Semester;
 use App\Models\SemesterRegistration;
 use App\Models\Student;
 use App\Models\Unit;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -71,7 +74,8 @@ class StudentController extends Controller
                 $data['photo_path'] = $request->file('photo')->store('students/photos', 'public');
             }
 
-            $student = Student::create($data);
+            $user = $this->createOrUpdateStudentUser($data);
+            $student = Student::create($data + ['user_id' => $user?->id]);
 
             foreach ($request->validated('academic_histories', []) as $history) {
                 $student->academicHistories()->create(array_merge($history, [
@@ -189,8 +193,9 @@ class StudentController extends Controller
 
                 Log::info('ENROLLMENT - Data before student create:', $data);
 
-                // Create the student
-                $student = Student::create($data);
+                // Create the student and a linked login account when an email is available.
+                $user = $this->createOrUpdateStudentUser($data);
+                $student = Student::create($data + ['user_id' => $user?->id]);
                 Log::info('ENROLLMENT - Student created:', $student->toArray());
 
                 // Create enrollments for selected units
@@ -296,7 +301,8 @@ class StudentController extends Controller
                 $data['photo_path'] = $request->file('photo')->store('students/photos', 'public');
             }
 
-            $student->fill($data)->save();
+            $user = $this->createOrUpdateStudentUser($data, $student);
+            $student->fill($data + ['user_id' => $user?->id ?? $student->user_id])->save();
             $student->academicHistories()->delete();
 
             foreach ($request->validated('academic_histories', []) as $history) {
@@ -338,5 +344,29 @@ class StudentController extends Controller
     private function getCurrentAcademicYear()
     {
         return AcademicYear::where('is_current', true)->first();
+    }
+
+    private function createOrUpdateStudentUser(array $data, ?Student $student = null): ?User
+    {
+        if (blank($data['email'] ?? null)) {
+            return null;
+        }
+
+        $user = $student?->user ?: new User();
+        $user->fill([
+            'name' => trim("{$data['first_name']} {$data['last_name']}"),
+            'email' => $data['email'],
+            'status' => ($data['status'] ?? 'active') === 'active' ? 'active' : 'suspended',
+            'status_reason' => ($data['status'] ?? 'active') === 'active' ? null : 'Synced from student status.',
+            'password' => $user->exists ? $user->password : Hash::make('password'),
+
+        ]);
+        $user->save();
+
+        if ($role = Role::where('name', 'Student')->first()) {
+            $user->roles()->syncWithoutDetaching([$role->id]);
+        }
+
+        return $user;
     }
 }

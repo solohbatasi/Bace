@@ -30,15 +30,27 @@ const paymentForm = useForm({
     method: 'cash',
     amount: '',
     status: 'confirmed',
-    external_transaction_id: '',
     notes: '',
 });
 
 const showingPaymentModal = ref(false);
 const deletingPayment = ref(null);
+const studentSelect = reactive({
+    isOpen: false,
+    search: '',
+});
 
 const selectedStudent = computed(() => props.students.find((student) => Number(student.id) === Number(paymentForm.student_id)));
 const selectedCourse = computed(() => selectedStudent.value?.courses.find((course) => Number(course.id) === Number(paymentForm.course_id)));
+const selectedStudentLabel = computed(() => selectedStudent.value ? `${selectedStudent.value.admission_number} - ${selectedStudent.value.name}` : 'Select learner');
+const filteredStudents = computed(() => {
+    const search = studentSelect.search.toLowerCase();
+
+    return props.students.filter((student) => [
+        student.admission_number,
+        student.name,
+    ].some((value) => String(value || '').toLowerCase().includes(search)));
+});
 const filterCourses = computed(() => {
     if (!filter.student_id) {
         return props.students
@@ -85,8 +97,9 @@ const resetPaymentForm = () => {
     paymentForm.method = 'cash';
     paymentForm.amount = '';
     paymentForm.status = 'confirmed';
-    paymentForm.external_transaction_id = '';
     paymentForm.notes = '';
+    studentSelect.search = '';
+    studentSelect.isOpen = false;
 };
 
 const openPaymentModal = () => {
@@ -107,7 +120,6 @@ const editPayment = async (payment) => {
     paymentForm.method = payment.method;
     paymentForm.amount = payment.amount;
     paymentForm.status = payment.status;
-    paymentForm.external_transaction_id = payment.external_transaction_id || '';
     paymentForm.notes = payment.notes || '';
 };
 
@@ -125,6 +137,19 @@ const destroyPayment = (payment) => {
     deletingPayment.value = payment;
 };
 
+const toggleStudentSelect = () => {
+    studentSelect.isOpen = !studentSelect.isOpen;
+    if (studentSelect.isOpen) {
+        studentSelect.search = '';
+    }
+};
+
+const selectStudent = (student) => {
+    paymentForm.student_id = student.id;
+    studentSelect.isOpen = false;
+    studentSelect.search = '';
+};
+
 const closeDeletePaymentModal = () => {
     deletingPayment.value = null;
 };
@@ -140,7 +165,7 @@ const confirmDeletePayment = () => {
 
 const exportCsv = () => {
     const rows = [
-        ['Learner', 'Admission No.', 'Course', 'Reference', 'Method', 'Status', 'Date', 'Amount', 'Transaction ID'],
+        ['Learner', 'Admission No.', 'Course', 'Reference', 'Method', 'Status', 'Date', 'Amount'],
         ...props.payments.data.map((payment) => [
             `${payment.student?.first_name || ''} ${payment.student?.last_name || ''}`.trim(),
             payment.student?.admission_number || '',
@@ -150,7 +175,6 @@ const exportCsv = () => {
             payment.status,
             payment.payment_date,
             payment.amount,
-            payment.external_transaction_id || '',
         ]),
     ];
 
@@ -235,7 +259,7 @@ const exportCsv = () => {
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ payment.course ? `${payment.course.code} - ${payment.course.name}` : 'Not assigned' }}</td>
                         <td class="px-5 py-4">
                             <p class="font-medium text-gray-900 dark:text-white">{{ payment.payment_reference }}</p>
-                            <p class="text-xs text-gray-500">{{ payment.external_transaction_id || 'No transaction ID' }}</p>
+                            <p class="text-xs capitalize text-gray-500">{{ payment.status }}</p>
                         </td>
                         <td class="px-5 py-4 capitalize text-gray-600 dark:text-gray-300">{{ payment.method }}</td>
                         <td class="px-5 py-4 text-gray-500">{{ payment.payment_date }}</td>
@@ -276,10 +300,43 @@ const exportCsv = () => {
                 <form id="payment-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="savePayment">
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Learner</label>
-                        <select v-model="paymentForm.student_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                            <option value="">Select learner</option>
-                            <option v-for="student in students" :key="student.id" :value="student.id">{{ student.admission_number }} - {{ student.name }}</option>
-                        </select>
+                        <div class="relative mt-1">
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                                @click="toggleStudentSelect"
+                            >
+                                <span class="truncate">{{ selectedStudentLabel }}</span>
+                                <svg class="size-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                                </svg>
+                            </button>
+
+                            <div v-if="studentSelect.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                <div class="sticky top-0 border-b border-gray-200 bg-white p-2 dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                    <input
+                                        v-model="studentSelect.search"
+                                        class="w-full rounded-md border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                                        placeholder="Search admission no. or name"
+                                        @keydown.esc="studentSelect.isOpen = false"
+                                    >
+                                </div>
+                                <button
+                                    v-for="student in filteredStudents"
+                                    :key="student.id"
+                                    type="button"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-[#252b3a]"
+                                    :class="Number(paymentForm.student_id) === Number(student.id) ? 'bg-violet-500/10 text-violet-700 dark:text-violet-300' : 'text-gray-700 dark:text-gray-300'"
+                                    @click="selectStudent(student)"
+                                >
+                                    <span class="block font-semibold">{{ student.admission_number }}</span>
+                                    <span class="text-xs text-gray-500">{{ student.name }}</span>
+                                </button>
+                                <div v-if="!filteredStudents.length" class="px-3 py-2 text-sm text-gray-500">
+                                    No learners found
+                                </div>
+                            </div>
+                        </div>
                         <p v-if="paymentForm.errors.student_id" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.student_id }}</p>
                     </div>
                     <div>
@@ -336,10 +393,6 @@ const exportCsv = () => {
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Reference</label>
                         <input v-model="paymentForm.payment_reference" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Auto generated if empty">
                         <p v-if="paymentForm.errors.payment_reference" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.payment_reference }}</p>
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Transaction ID</label>
-                        <input v-model="paymentForm.external_transaction_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
                     </div>
                     <div class="md:col-span-2">
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Notes</label>

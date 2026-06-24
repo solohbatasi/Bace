@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Department;
 use App\Models\Lecturer;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,19 +45,33 @@ class LecturerManagementController extends Controller
     {
         abort_unless($request->user()->hasPermission('classes.manage'), 403);
 
-        Lecturer::create($this->lecturerData($request) + [
-            'created_by' => $request->user()->id,
-            'updated_by' => $request->user()->id,
-        ]);
+        DB::transaction(function () use ($request): void {
+            $data = $this->lecturerData($request);
+            $user = $this->createOrUpdateLecturerUser($data);
 
-        return back()->with('flash.banner', 'Lecturer created.');
+            Lecturer::create($data + [
+                'user_id' => $user?->id,
+                'created_by' => $request->user()->id,
+                'updated_by' => $request->user()->id,
+            ]);
+        });
+
+        return back()->with('flash.banner', 'Lecturer created. Email login created when an email was provided.');
     }
 
     public function update(Request $request, Lecturer $lecturer): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('classes.manage'), 403);
 
-        $lecturer->update($this->lecturerData($request, $lecturer) + ['updated_by' => $request->user()->id]);
+        DB::transaction(function () use ($request, $lecturer): void {
+            $data = $this->lecturerData($request, $lecturer);
+            $user = $this->createOrUpdateLecturerUser($data, $lecturer);
+
+            $lecturer->update($data + [
+                'user_id' => $user?->id ?? $lecturer->user_id,
+                'updated_by' => $request->user()->id,
+            ]);
+        });
 
         return back()->with('flash.banner', 'Lecturer updated.');
     }
@@ -77,10 +95,39 @@ class LecturerManagementController extends Controller
             'first_name' => ['required', 'max:100'],
             'middle_name' => ['nullable', 'max:100'],
             'last_name' => ['required', 'max:100'],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('lecturers')->ignore($lecturer)->whereNull('deleted_at')],
+            'email' => [
+                'nullable',
+                'email',
+                'max:255',
+                Rule::unique('lecturers')->ignore($lecturer)->whereNull('deleted_at'),
+                Rule::unique('users')->ignore($lecturer?->user_id)->whereNull('deleted_at'),
+            ],
             'phone' => ['nullable', 'max:30'],
             'hired_on' => ['nullable', 'date'],
             'employment_status' => ['required', Rule::in(['active', 'inactive', 'suspended', 'terminated'])],
         ]);
+    }
+
+    private function createOrUpdateLecturerUser(array $data, ?Lecturer $lecturer = null): ?User
+    {
+        if (blank($data['email'] ?? null)) {
+            return null;
+        }
+
+        $user = $lecturer?->user ?: new User();
+        $user->fill([
+            'name' => trim(($data['title'] ? "{$data['title']} " : '') . "{$data['first_name']} {$data['last_name']}"),
+            'email' => $data['email'],
+            'status' => $data['employment_status'] === 'active' ? 'active' : 'suspended',
+            'status_reason' => $data['employment_status'] === 'active' ? null : 'Synced from lecturer employment status.',
+            'password' => $user->exists ? $user->password : Hash::make('password'),
+        ]);
+        $user->save();
+
+        if ($role = Role::where('name', 'Lecturer')->first()) {
+            $user->roles()->syncWithoutDetaching([$role->id]);
+        }
+
+        return $user;
     }
 }
