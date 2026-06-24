@@ -27,7 +27,7 @@ class UserController extends Controller
             ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->when($filters['role'] ?? null, fn ($query, $role) => $query->whereHas('roles', fn ($query) => $query->where('roles.id', $role)))
             ->latest()
-            ->paginate(10)
+            ->paginate(20)
             ->withQueryString();
 
         return Inertia::render('Admin/Users', [

@@ -13,6 +13,7 @@ use App\Http\Controllers\CourseManagementController;
 use App\Http\Controllers\DepartmentManagementController;
 use App\Http\Controllers\EnrollmentManagementController;
 use App\Http\Controllers\LecturerManagementController;
+use App\Http\Controllers\OrganisationSettingsController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnitManagementController;
@@ -48,6 +49,9 @@ Route::middleware([
         Route::get('system-health', SystemHealthController::class)->name('system-health');
         Route::delete('system-health/sessions/{session}', [SystemHealthController::class, 'destroySession'])->name('system-health.sessions.destroy');
         Route::delete('system-health/tokens/{token}', [SystemHealthController::class, 'destroyToken'])->name('system-health.tokens.destroy');
+
+        Route::get('organisation-settings', [OrganisationSettingsController::class, 'index'])->name('organisation-settings.index');
+        Route::put('organisation-settings', [OrganisationSettingsController::class, 'update'])->name('organisation-settings.update');
     });
 
     // Student routes - ADD THE ENROLL ROUTE HERE

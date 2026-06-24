@@ -28,7 +28,7 @@ class UnitManagementController extends Controller
                 ->when($filters['course_id'] ?? null, fn ($query, $course) => $query->where('course_id', $course))
                 ->when($filters['department_id'] ?? null, fn ($query, $department) => $query->where('department_id', $department))
                 ->orderBy('code')
-                ->paginate(10)
+                ->paginate(20)
                 ->withQueryString(),
             'courses' => Course::orderBy('name')->get(['id', 'code', 'name', 'department_id']),
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),

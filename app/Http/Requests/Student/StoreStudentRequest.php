@@ -8,6 +8,17 @@ use Illuminate\Validation\Rule;
 
 class StoreStudentRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('academic_histories') && is_string($this->input('academic_histories'))) {
+            $decoded = json_decode($this->input('academic_histories'), true);
+
+            $this->merge([
+                'academic_histories' => is_array($decoded) ? $decoded : [],
+            ]);
+        }
+    }
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', Student::class) ?? false;
@@ -19,6 +30,7 @@ class StoreStudentRequest extends FormRequest
             'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'department_id' => ['required', 'integer', Rule::exists('departments', 'id')],
             'course_id' => ['required', 'integer', Rule::exists('courses', 'id')],
+            'course_fee' => ['nullable', 'numeric', 'min:0'],
             'class_id' => ['nullable', 'integer', Rule::exists('classes', 'id')],
             'admission_number' => ['nullable', 'string', 'max:50'],
             'first_name' => ['required', 'string', 'max:100'],

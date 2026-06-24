@@ -31,6 +31,7 @@ const studentForm = useForm({
     id: null,
     department_id: '',
     course_id: '',
+    course_fee: '',
     class_id: '',
     academic_year_id: props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '',
     semester_id: props.semesters.find((semester) => semester.is_current)?.id || props.semesters[0]?.id || '',
@@ -122,10 +123,19 @@ const selectedCourseLabel = computed(() => {
     return course ? `${course.code} - ${course.name}` : 'Select course';
 });
 
+const selectedCourse = computed(() => props.courses.find(c => c.id === studentForm.course_id));
+
 const selectedClassLabel = computed(() => {
     const cls = props.classes.find(c => c.id === studentForm.class_id);
     return cls ? `${cls.code} - ${cls.name}` : 'Select class';
 });
+
+const dateInputValue = (value) => {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+};
+
+const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
 
 const showingEnrollmentModal = ref(false);
 const deletingStudent = ref(null);
@@ -133,6 +143,7 @@ const selectedUnits = ref([]);
 const courseUnits = ref([]);
 const loadingUnits = ref(false);
 const isEditing = ref(false);
+const showingGuardianInformation = ref(false);
 
 // Stats
 const stats = computed(() => ({
@@ -159,9 +170,11 @@ const resetStudentForm = () => {
     studentForm.academic_histories = [];
     studentForm.photo = null;
     studentForm.photo_preview = null;
+    studentForm.course_fee = '';
     courseUnits.value = [];
     selectedUnits.value = [];
     isEditing.value = false;
+    showingGuardianInformation.value = false;
 
     // Reset searchable selects
     searchableSelects.department.search = '';
@@ -185,6 +198,7 @@ const editStudent = (student) => {
     studentForm.id = student.id;
     studentForm.department_id = student.department_id;
     studentForm.course_id = student.course_id;
+    studentForm.course_fee = student.course_fee ?? selectedCourse.value?.fees ?? '';
     studentForm.class_id = student.class_id;
     studentForm.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '';
     studentForm.semester_id = props.semesters.find((semester) => semester.is_current)?.id || props.semesters[0]?.id || '';
@@ -193,7 +207,7 @@ const editStudent = (student) => {
     studentForm.middle_name = student.middle_name || '';
     studentForm.last_name = student.last_name;
     studentForm.gender = student.gender || '';
-    studentForm.date_of_birth = student.date_of_birth || '';
+    studentForm.date_of_birth = dateInputValue(student.date_of_birth);
     studentForm.email = student.email || '';
     studentForm.phone = student.phone || '';
     studentForm.address = student.address || '';
@@ -202,7 +216,14 @@ const editStudent = (student) => {
     studentForm.guardian_phone = student.guardian_phone || '';
     studentForm.guardian_email = student.guardian_email || '';
     studentForm.guardian_address = student.guardian_address || '';
-    studentForm.admitted_on = student.admitted_on;
+    showingGuardianInformation.value = Boolean(
+        student.guardian_name ||
+        student.guardian_relationship ||
+        student.guardian_phone ||
+        student.guardian_email ||
+        student.guardian_address
+    );
+    studentForm.admitted_on = dateInputValue(student.admitted_on);
     studentForm.status = student.status;
     studentForm.photo_preview = student.photo_path ? `/storage/${student.photo_path}` : null;
 
@@ -264,11 +285,17 @@ const fetchCourseUnits = async (courseId) => {
 
 // Watch course_id changes for unit loading
 watch(() => studentForm.course_id, (newCourseId) => {
+    const course = props.courses.find(c => c.id === newCourseId);
+    if (!isEditing.value || !studentForm.course_fee) {
+        studentForm.course_fee = course?.fees ?? '';
+    }
+
     if (newCourseId && !isEditing.value) {
         fetchCourseUnits(newCourseId);
     } else if (!newCourseId) {
         courseUnits.value = [];
         selectedUnits.value = [];
+        studentForm.course_fee = '';
     }
 });
 
@@ -287,6 +314,7 @@ const selectDepartment = (dept) => {
 
 const selectCourse = (course) => {
     studentForm.course_id = course.id;
+    studentForm.course_fee = course.fees ?? '';
     searchableSelects.course.isOpen = false;
     searchableSelects.course.search = '';
 };
@@ -523,6 +551,7 @@ const exportCsv = () => {
                         <th class="px-5 py-3">Department</th>
                         <th class="px-5 py-3">Course</th>
                         <th class="px-5 py-3">Class</th>
+                        <th class="px-5 py-3">Payments</th>
                         <th class="px-5 py-3">Status</th>
                         <th class="px-5 py-3 text-right">Actions</th>
                     </tr>
@@ -548,14 +577,19 @@ const exportCsv = () => {
                             </div>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
-                            {{ student.department?.code || '-' }}
+                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ student.department?.name || '-' }}</p>
+                            <p class="text-xs text-gray-500">{{ student.department?.code || '' }}</p>
                         </td>
                         <td class="px-5 py-4">
-                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ student.course?.code }}</p>
-                            <p class="text-xs text-gray-500">{{ student.course?.name }}</p>
+                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ student.course?.name || '-' }}</p>
+                            <p class="text-xs text-gray-500">{{ student.course?.code || '' }}</p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             {{ student.class?.name || 'Not assigned' }}
+                        </td>
+                        <td class="px-5 py-4">
+                            <p class="font-semibold text-amber-500">{{ money(student.payment_summary?.remaining) }}</p>
+                            <p class="text-xs text-gray-500">Paid {{ money(student.payment_summary?.paid) }}</p>
                         </td>
                         <td class="px-5 py-4">
                             <span
@@ -797,6 +831,11 @@ const exportCsv = () => {
                                 <p v-if="studentForm.errors.semester_id" class="mt-1 text-xs text-red-400">{{ studentForm.errors.semester_id }}</p>
                             </div>
                             <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course Amount</label>
+                                <input v-model="studentForm.course_fee" type="number" min="0" step="0.01" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :placeholder="selectedCourse ? `Default: ${selectedCourse.fees}` : 'Select course first'">
+                                <p v-if="studentForm.errors.course_fee" class="mt-1 text-xs text-red-400">{{ studentForm.errors.course_fee }}</p>
+                            </div>
+                            <div>
                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Admission Number</label>
                                 <input v-model="studentForm.admission_number" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Auto-generate if empty">
                             </div>
@@ -843,8 +882,13 @@ const exportCsv = () => {
 
                     <!-- Guardian Information -->
                     <div class="md:col-span-2">
-                        <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Guardian Information</h3>
-                        <div class="mt-2 grid gap-4 md:grid-cols-2">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Guardian Information</h3>
+                            <button type="button" class="text-xs text-violet-500 hover:text-violet-400" @click="showingGuardianInformation = !showingGuardianInformation">
+                                {{ showingGuardianInformation ? 'Minimize' : 'Expand' }}
+                            </button>
+                        </div>
+                        <div v-if="showingGuardianInformation" class="mt-2 grid gap-4 md:grid-cols-2">
                             <div>
                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Guardian Name</label>
                                 <input v-model="studentForm.guardian_name" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
@@ -861,7 +905,10 @@ const exportCsv = () => {
                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Guardian Email</label>
                                 <input v-model="studentForm.guardian_email" type="email" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
                             </div>
-
+                            <div class="md:col-span-2">
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Guardian Address</label>
+                                <textarea v-model="studentForm.guardian_address" rows="2" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" />
+                            </div>
                         </div>
                     </div>
 

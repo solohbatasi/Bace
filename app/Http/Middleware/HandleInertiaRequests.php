@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\OrganisationSetting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -37,7 +38,15 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
-            //
+            'organisation' => fn () => optional(OrganisationSetting::query()->first())->only([
+                'name',
+                'short_name',
+                'logo_url',
+            ]) ?? [
+                'name' => config('app.name'),
+                'short_name' => 'ISP',
+                'logo_url' => null,
+            ],
         ];
     }
 }

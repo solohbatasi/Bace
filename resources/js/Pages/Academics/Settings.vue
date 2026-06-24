@@ -4,17 +4,27 @@ import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
+import Pagination from '@/Components/Admin/Pagination.vue';
 
 const props = defineProps({
-    academicYears: Array,
-    semesters: Array,
-    classes: Array,
+    academicYears: Object,
+    semesters: Object,
+    classes: Object,
     courses: Array,
     departments: Array,
     lecturers: Array,
+    academicYearOptions: Array,
+    semesterOptions: Array,
 });
 
-const activeTab = ref('academicYears');
+const initialTab = () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('classes_page')) return 'classes';
+    if (params.has('semesters_page')) return 'semesters';
+    return 'academicYears';
+};
+
+const activeTab = ref(initialTab());
 const deleting = ref(null);
 
 const yearForm = useForm({ id: null, name: '', starts_on: '', ends_on: '', is_current: false });
@@ -22,9 +32,9 @@ const semesterForm = useForm({ id: null, academic_year_id: '', name: '', sequenc
 const classForm = useForm({ id: null, course_id: '', department_id: '', academic_year_id: '', semester_id: '', class_lecturer_id: '', code: '', name: '', year_level: 1, capacity: '', is_active: true });
 
 const tabs = computed(() => [
-    { key: 'academicYears', label: 'Academic Years', count: props.academicYears.length },
-    { key: 'semesters', label: 'Semesters', count: props.semesters.length },
-    { key: 'classes', label: 'Classes', count: props.classes.length },
+    { key: 'academicYears', label: 'Academic Years', count: props.academicYears.total },
+    { key: 'semesters', label: 'Semesters', count: props.semesters.total },
+    { key: 'classes', label: 'Classes', count: props.classes.total },
 ]);
 
 const singularLabel = computed(() => ({
@@ -34,11 +44,17 @@ const singularLabel = computed(() => ({
 })[activeTab.value]);
 
 const stats = computed(() => ({
-    years: props.academicYears.length,
-    currentYear: props.academicYears.find((year) => year.is_current)?.name || '-',
-    semesters: props.semesters.length,
-    classes: props.classes.filter((collegeClass) => collegeClass.is_active).length,
+    years: props.academicYears.total,
+    currentYear: props.academicYearOptions.find((year) => year.is_current)?.name || '-',
+    semesters: props.semesters.total,
+    classes: props.classes.data.filter((collegeClass) => collegeClass.is_active).length,
 }));
+
+const activePagination = computed(() => {
+    if (activeTab.value === 'academicYears') return props.academicYears;
+    if (activeTab.value === 'semesters') return props.semesters;
+    return props.classes;
+});
 
 const currentForm = computed(() => {
     if (activeTab.value === 'academicYears') return yearForm;
@@ -62,7 +78,7 @@ const resetYearForm = () => {
 const resetSemesterForm = () => {
     semesterForm.clearErrors();
     semesterForm.id = null;
-    semesterForm.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '';
+    semesterForm.academic_year_id = props.academicYearOptions.find((year) => year.is_current)?.id || props.academicYearOptions[0]?.id || '';
     semesterForm.name = '';
     semesterForm.sequence = 1;
     semesterForm.starts_on = '';
@@ -75,8 +91,8 @@ const resetClassForm = () => {
     classForm.id = null;
     classForm.course_id = '';
     classForm.department_id = '';
-    classForm.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '';
-    classForm.semester_id = props.semesters.find((semester) => semester.is_current)?.id || '';
+    classForm.academic_year_id = props.academicYearOptions.find((year) => year.is_current)?.id || props.academicYearOptions[0]?.id || '';
+    classForm.semester_id = props.semesterOptions.find((semester) => semester.is_current)?.id || '';
     classForm.class_lecturer_id = '';
     classForm.code = '';
     classForm.name = '';
@@ -234,7 +250,7 @@ const selectCourse = () => {
         </div>
 
         <div class="mt-4 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-[#273044] dark:bg-[#11141b]">
-            <table v-if="activeTab === 'academicYears' && academicYears.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
+            <table v-if="activeTab === 'academicYears' && academicYears.data.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
                 <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
                     <tr>
                         <th class="px-5 py-3">Academic Year</th>
@@ -245,7 +261,7 @@ const selectCourse = () => {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
-                    <tr v-for="year in academicYears" :key="year.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
+                    <tr v-for="year in academicYears.data" :key="year.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
                         <td class="px-5 py-4 font-semibold text-gray-900 dark:text-white">{{ year.name }}</td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ year.starts_on }} to {{ year.ends_on }}</td>
                         <td class="px-5 py-4 text-gray-500">{{ year.semesters_count }}</td>
@@ -260,7 +276,7 @@ const selectCourse = () => {
                 </tbody>
             </table>
 
-            <table v-else-if="activeTab === 'semesters' && semesters.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
+            <table v-else-if="activeTab === 'semesters' && semesters.data.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
                 <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
                     <tr>
                         <th class="px-5 py-3">Semester</th>
@@ -272,7 +288,7 @@ const selectCourse = () => {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
-                    <tr v-for="semester in semesters" :key="semester.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
+                    <tr v-for="semester in semesters.data" :key="semester.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
                         <td class="px-5 py-4 font-semibold text-gray-900 dark:text-white">{{ semester.name }}</td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ semester.academic_year?.name || '-' }}</td>
                         <td class="px-5 py-4 text-gray-500">{{ semester.sequence }}</td>
@@ -288,7 +304,7 @@ const selectCourse = () => {
                 </tbody>
             </table>
 
-            <table v-else-if="activeTab === 'classes' && classes.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
+            <table v-else-if="activeTab === 'classes' && classes.data.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
                 <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
                     <tr>
                         <th class="px-5 py-3">Class</th>
@@ -300,7 +316,7 @@ const selectCourse = () => {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
-                    <tr v-for="collegeClass in classes" :key="collegeClass.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
+                    <tr v-for="collegeClass in classes.data" :key="collegeClass.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
                         <td class="px-5 py-4">
                             <p class="font-semibold text-gray-900 dark:text-white">{{ collegeClass.code }} - {{ collegeClass.name }}</p>
                             <p class="text-xs text-gray-500">Y{{ collegeClass.year_level }} / {{ collegeClass.students_count }} students</p>
@@ -323,6 +339,10 @@ const selectCourse = () => {
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No records found</p>
                 <p class="mt-1 text-sm text-gray-500">Create a record for the selected tab.</p>
                 <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCreateModal()">Add {{ singularLabel }}</button>
+            </div>
+
+            <div v-if="activePagination.links?.length" class="border-t border-gray-200 p-4 dark:border-[#232837]">
+                <Pagination :links="activePagination.links" />
             </div>
         </div>
 
@@ -357,7 +377,7 @@ const selectCourse = () => {
                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Academic year</label>
                             <select v-model="semesterForm.academic_year_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
                                 <option value="">Select year</option>
-                                <option v-for="year in academicYears" :key="year.id" :value="year.id">{{ year.name }}</option>
+                                <option v-for="year in academicYearOptions" :key="year.id" :value="year.id">{{ year.name }}</option>
                             </select>
                         </div>
                         <div>
@@ -403,14 +423,14 @@ const selectCourse = () => {
                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Academic year</label>
                             <select v-model="classForm.academic_year_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
                                 <option value="">Select year</option>
-                                <option v-for="year in academicYears" :key="year.id" :value="year.id">{{ year.name }}</option>
+                                <option v-for="year in academicYearOptions" :key="year.id" :value="year.id">{{ year.name }}</option>
                             </select>
                         </div>
                         <div>
                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Semester</label>
                             <select v-model="classForm.semester_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
                                 <option value="">All semesters</option>
-                                <option v-for="semester in semesters" :key="semester.id" :value="semester.id">{{ semester.name }}</option>
+                                <option v-for="semester in semesterOptions" :key="semester.id" :value="semester.id">{{ semester.name }}</option>
                             </select>
                         </div>
                         <div>

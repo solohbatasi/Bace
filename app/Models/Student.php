@@ -22,6 +22,7 @@ class Student extends Model
     protected $casts = [
         'date_of_birth' => 'date',
         'admitted_on' => 'date',
+        'course_fee' => 'decimal:2',
     ];
 
     protected $appends = ['photo_url'];

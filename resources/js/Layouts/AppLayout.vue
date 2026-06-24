@@ -16,6 +16,8 @@ const props = defineProps({
 
 const page = usePage();
 const sidebarOpen = ref(localStorage.getItem('sidebar') !== 'closed');
+const organisation = computed(() => page.props.organisation || {});
+const organisationInitials = computed(() => (organisation.value.short_name || organisation.value.name || 'ORG').substring(0, 3).toUpperCase());
 
 const navigation = computed(() => [
     { name: 'Dashboard', route: 'dashboard', href: route('dashboard'), icon: 'dashboard' },
@@ -31,6 +33,7 @@ const navigation = computed(() => [
     { name: 'Assignments', route: 'academics.assignments.*', href: route('academics.assignments.index'), icon: 'file' },
     { name: 'Roles', route: 'admin.roles.*', href: route('admin.roles.index'), icon: 'shield' },
     { name: 'Permissions', route: 'admin.permissions.*', href: route('admin.permissions.index'), icon: 'key' },
+    { name: 'Organisation Settings', route: 'admin.organisation-settings.*', href: route('admin.organisation-settings.index'), icon: 'building' },
     { name: 'System Health', route: 'admin.system-health', href: route('admin.system-health'), icon: 'activity' },
     page.props.jetstream.hasApiFeatures ? { name: 'API Tokens', route: 'api-tokens.index', href: route('api-tokens.index'), icon: 'mobile' } : null,
 ].filter(Boolean));
@@ -54,12 +57,11 @@ const logout = () => router.post(route('logout'));
                 :class="sidebarOpen ? 'w-60' : 'w-[72px]'"
             >
                 <div class="flex h-14 items-center gap-3 border-b border-gray-200 px-5 dark:border-[#232837]">
-                    <div class="inline-flex size-7 items-center justify-center rounded-md bg-violet-500 text-white">
-                        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z" />
-                        </svg>
+                    <div class="inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-violet-500 text-[10px] font-bold text-white">
+                        <img v-if="organisation.logo_url" :src="organisation.logo_url" :alt="organisation.name || 'Organisation logo'" class="size-full object-cover">
+                        <span v-else>{{ organisationInitials }}</span>
                     </div>
-                    <span v-if="sidebarOpen" class="text-sm font-bold text-gray-900 dark:text-white">ISP SaaS</span>
+                    <span v-if="sidebarOpen" class="truncate text-sm font-bold text-gray-900 dark:text-white">{{ organisation.short_name || organisation.name || 'ISP' }}</span>
                 </div>
 
                 <div class="flex-1 overflow-y-auto px-2 py-4">

@@ -34,7 +34,7 @@ class LecturerManagementController extends Controller
                 ->when($filters['department_id'] ?? null, fn ($query, $department) => $query->where('department_id', $department))
                 ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('employment_status', $status))
                 ->orderBy('last_name')
-                ->paginate(10)
+                ->paginate(20)
                 ->withQueryString(),
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'filters' => $filters,
