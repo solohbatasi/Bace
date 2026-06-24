@@ -2,12 +2,14 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
 const props = defineProps({ users: Object, roles: Array, permissions: Array, filters: Object });
 
 const showingUserModal = ref(false);
+const deletingUser = ref(null);
 const filter = reactive({ search: props.filters.search || '', status: props.filters.status || '', role: props.filters.role || '' });
 const form = useForm({
     id: null,
@@ -15,8 +17,6 @@ const form = useForm({
     email: '',
     password: '',
     status: 'active',
-    status_reason: '',
-    suspended_until: '',
     role_ids: [],
     permission_ids: [],
 });
@@ -37,8 +37,6 @@ const resetForm = () => {
     form.email = '';
     form.password = '';
     form.status = 'active';
-    form.status_reason = '';
-    form.suspended_until = '';
     form.role_ids = [];
     form.permission_ids = [];
 };
@@ -54,8 +52,6 @@ const edit = (user) => {
     form.name = user.name;
     form.email = user.email;
     form.status = user.status;
-    form.status_reason = user.status_reason || '';
-    form.suspended_until = user.suspended_until || '';
     form.role_ids = user.roles.map((role) => role.id);
     form.permission_ids = user.permissions.map((permission) => permission.id);
     showingUserModal.value = true;
@@ -76,27 +72,50 @@ const save = () => {
 };
 
 const destroyUser = (user) => {
-    if (confirm(`Delete ${user.name}?`)) router.delete(route('admin.users.destroy', user.id), { preserveScroll: true });
+    deletingUser.value = user;
+};
+
+const closeDeleteUserModal = () => {
+    deletingUser.value = null;
+};
+
+const confirmDeleteUser = () => {
+    if (!deletingUser.value) return;
+
+    router.delete(route('admin.users.destroy', deletingUser.value.id), {
+        preserveScroll: true,
+        onSuccess: closeDeleteUserModal,
+    });
 };
 
 const postAction = (name, user) => router.post(route(`admin.users.${name}`, user.id), {}, { preserveScroll: true });
+
+const exportCsv = () => {
+    const rows = [
+        ['Name', 'Email', 'Roles', 'Direct Permissions', 'Status', 'Status Reason', 'Created'],
+        ...props.users.data.map((user) => [
+            user.name,
+            user.email,
+            user.roles.map((role) => role.name).join('; '),
+            user.permissions.map((permission) => permission.name).join('; '),
+            user.status,
+            user.status_reason || '',
+            user.created_at,
+        ]),
+    ];
+
+    const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'users.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+};
 </script>
 
 <template>
     <AppLayout title="Users">
-        <template #actions>
-            <button class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white">
-                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16" />
-                </svg>
-                Export CSV
-            </button>
-            <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" @click="openCreateModal">
-                <span class="text-base leading-none">+</span>
-                New User
-            </button>
-        </template>
-
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
                 <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Total</p>
@@ -116,8 +135,18 @@ const postAction = (name, user) => router.post(route(`admin.users.${name}`, user
             </div>
         </div>
 
-        <div class="mt-4 flex flex-col justify-between gap-3 md:flex-row">
+        <div class="mt-4 flex flex-col justify-between gap-3 xl:flex-row">
             <div class="flex flex-wrap gap-2">
+                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white" type="button" @click="exportCsv">
+                    <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16" />
+                    </svg>
+                    Export CSV
+                </button>
+                <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal">
+                    <span class="text-base leading-none">+</span>
+                    New User
+                </button>
                 <button
                     v-for="status in ['', 'active', 'suspended', 'terminated']"
                     :key="status || 'all'"
@@ -128,7 +157,7 @@ const postAction = (name, user) => router.post(route(`admin.users.${name}`, user
                     {{ status || 'All' }}
                 </button>
             </div>
-            <div class="flex gap-2">
+            <div class="flex flex-col gap-2 sm:flex-row">
                 <select v-model="filter.role" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300">
                     <option value="">All roles</option>
                     <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
@@ -167,11 +196,11 @@ const postAction = (name, user) => router.post(route(`admin.users.${name}`, user
                         <td class="px-5 py-4 text-xs text-gray-500">{{ user.created_at }}</td>
                         <td class="px-5 py-4 text-right">
                             <div class="flex justify-end gap-2">
-                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(user)">Edit</button>
-                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-amber-600 transition hover:border-amber-400 dark:border-[#2a3040] dark:text-amber-300" @click="postAction('suspend', user)">Suspend</button>
-                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-emerald-600 transition hover:border-emerald-400 dark:border-[#2a3040] dark:text-emerald-300" @click="postAction('activate', user)">Activate</button>
-                                <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" @click="postAction('terminate', user)">Terminate</button>
-                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 transition hover:border-red-400 hover:text-red-600 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-red-300" @click="destroyUser(user)">Delete</button>
+                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="edit(user)">Edit</button>
+                                <button v-if="user.status === 'active'" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-amber-600 transition hover:border-amber-400 dark:border-[#2a3040] dark:text-amber-300" type="button" @click="postAction('suspend', user)">Suspend</button>
+                                <button v-if="user.status !== 'active'" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-emerald-600 transition hover:border-emerald-400 dark:border-[#2a3040] dark:text-emerald-300" type="button" @click="postAction('activate', user)">Activate</button>
+                                <button v-if="user.status === 'active'" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="postAction('terminate', user)">Terminate</button>
+                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 transition hover:border-red-400 hover:text-red-600 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-red-300" type="button" @click="destroyUser(user)">Delete</button>
                             </div>
                         </td>
                     </tr>
@@ -225,14 +254,6 @@ const postAction = (name, user) => router.post(route(`admin.users.${name}`, user
                         </select>
                     </div>
                     <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Suspended until</label>
-                        <input v-model="form.suspended_until" type="datetime-local" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Status reason</label>
-                        <textarea v-model="form.status_reason" rows="2" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" />
-                    </div>
-                    <div>
                         <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Roles</p>
                         <div class="mt-2 max-h-44 space-y-2 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 dark:border-[#2a3040] dark:bg-[#0c0f16]">
                             <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm">
@@ -260,5 +281,19 @@ const postAction = (name, user) => router.post(route(`admin.users.${name}`, user
                 </button>
             </template>
         </DialogModal>
+
+        <ConfirmationModal :show="Boolean(deletingUser)" max-width="md" @close="closeDeleteUserModal">
+            <template #title>Delete user</template>
+            <template #content>
+                <p>
+                    Delete <span class="font-semibold text-gray-900 dark:text-white">{{ deletingUser?.name }}</span>?
+                </p>
+                <p class="mt-2">This removes the user account and its direct access assignments.</p>
+            </template>
+            <template #footer>
+                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeDeleteUserModal">Cancel</button>
+                <button class="rounded-md bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400" type="button" @click="confirmDeleteUser">Delete user</button>
+            </template>
+        </ConfirmationModal>
     </AppLayout>
 </template>
