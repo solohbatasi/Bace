@@ -35,6 +35,7 @@ const navigation = computed(() => [
     { name: 'Lecturers', route: 'academics.lecturers.*', href: route('academics.lecturers.index'), icon: 'lecturer', permission: 'lecturers.view|classes.manage' },
     { name: 'Enrollments', route: 'academics.enrollments.*', href: route('academics.enrollments.index'), icon: 'clipboard', permission: 'enrollments.view|classes.manage' },
     { name: 'Examinations', route: 'academics.examinations.*', href: route('academics.examinations.index'), icon: 'file', permission: 'examinations.view|classes.manage' },
+    { name: 'Results', route: 'academics.results.*', href: route('academics.results.index'), icon: 'clipboard', permission: 'examinations.edit|examinations.manage|classes.manage' },
     { name: 'Assignments', route: 'academics.assignments.*', href: route('academics.assignments.index'), icon: 'file', permission: 'assignments.view|assignments.manage' },
     { name: 'Roles', route: 'admin.roles.*', href: route('admin.roles.index'), icon: 'shield', permission: 'roles.view' },
     { name: 'Permissions', route: 'admin.permissions.*', href: route('admin.permissions.index'), icon: 'key', permission: 'permissions.view|permissions.manage' },

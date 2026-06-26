@@ -53,4 +53,9 @@ class SemesterRegistration extends Model
     {
         return $this->hasMany(Enrollment::class);
     }
+
+    public function examinationResults(): HasMany
+    {
+        return $this->hasMany(ExaminationResult::class);
+    }
 }

@@ -24,6 +24,7 @@ class Examination extends Model
         'weight_percent' => 'decimal:2',
         'is_analysed' => 'boolean',
         'include_in_final_analysis' => 'boolean',
+        'can_edit_results' => 'boolean',
         'is_active' => 'boolean',
     ];
 
@@ -50,5 +51,10 @@ class Examination extends Model
     public function scoreLevels(): HasMany
     {
         return $this->hasMany(ScoreLevel::class)->orderBy('sort_order')->orderBy('min_score');
+    }
+
+    public function results(): HasMany
+    {
+        return $this->hasMany(ExaminationResult::class);
     }
 }

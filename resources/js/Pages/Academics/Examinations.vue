@@ -48,6 +48,7 @@ const form = useForm({
     weight_percent: '',
     is_analysed: false,
     include_in_final_analysis: true,
+    can_edit_results: true,
     is_active: true,
     description: '',
 });
@@ -147,6 +148,7 @@ const resetForm = () => {
     form.weight_percent = '';
     form.is_analysed = false;
     form.include_in_final_analysis = true;
+    form.can_edit_results = true;
     form.is_active = true;
     form.description = '';
     searchableSelects.department.search = '';
@@ -180,6 +182,7 @@ const edit = (examination) => {
     form.weight_percent = examination.weight_percent || '';
     form.is_analysed = Boolean(examination.is_analysed);
     form.include_in_final_analysis = Boolean(examination.include_in_final_analysis);
+    form.can_edit_results = Boolean(examination.can_edit_results);
     form.is_active = Boolean(examination.is_active);
     form.description = examination.description || '';
     showingModal.value = true;
@@ -401,6 +404,9 @@ const confirmDelete = () => {
                                 <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="exam.include_in_final_analysis ? 'bg-amber-500/10 text-amber-500' : 'bg-gray-100 text-gray-500 dark:bg-[#1a1f2b]'">
                                     {{ exam.include_in_final_analysis ? 'Final' : 'Excluded' }}
                                 </span>
+                                <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="exam.can_edit_results ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-400'">
+                                    {{ exam.can_edit_results ? 'Editable' : 'Locked' }}
+                                </span>
                             </div>
                         </td>
                         <td class="px-5 py-4">
@@ -591,7 +597,7 @@ const confirmDelete = () => {
                                 <input v-model="form.weight_percent" type="number" min="0" max="100" step="0.01" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
                             </div>
                         </div>
-                        <div class="mt-4 grid gap-3 md:grid-cols-3">
+                        <div class="mt-4 grid gap-3 md:grid-cols-4">
                             <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
                                 <input v-model="form.is_analysed" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
                                 Analysed
@@ -599,6 +605,10 @@ const confirmDelete = () => {
                             <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
                                 <input v-model="form.include_in_final_analysis" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
                                 Final analysis
+                            </label>
+                            <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
+                                <input v-model="form.can_edit_results" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
+                                Editable results
                             </label>
                             <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
                                 <input v-model="form.is_active" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">

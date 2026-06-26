@@ -109,6 +109,7 @@ class ExaminationManagementController extends Controller
             'grading_mode' => ['nullable', Rule::in(['grade_only', 'score_levels', 'score_levels_with_grades'])],
             'is_analysed' => ['boolean'],
             'include_in_final_analysis' => ['boolean'],
+            'can_edit_results' => ['boolean'],
             'is_active' => ['boolean'],
             'description' => ['nullable', 'string'],
         ]);
@@ -155,4 +156,5 @@ class ExaminationManagementController extends Controller
 
         return $data;
     }
+
 }
