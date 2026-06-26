@@ -44,4 +44,9 @@ class Unit extends Model
     {
         return $this->hasMany(ScoreLevel::class)->orderBy('sort_order')->orderBy('min_score');
     }
+
+    public function examinations(): HasMany
+    {
+        return $this->hasMany(Examination::class);
+    }
 }
