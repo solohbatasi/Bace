@@ -26,7 +26,7 @@ class CourseManagementController extends Controller
 
         return Inertia::render('Academics/Courses', [
             'courses' => Course::query()
-                ->with(['department:id,name,code', 'units.lecturerAssignments.lecturer:id,title,first_name,last_name'])
+                ->with(['department:id,name,code', 'scoreLevels', 'units.lecturerAssignments.lecturer:id,title,first_name,last_name'])
                 ->withCount('units')
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('code', 'like', "%{$search}%")
@@ -53,6 +53,7 @@ class CourseManagementController extends Controller
                 'canAddUnit' => $request->user()->hasAnyPermission('units.add|classes.manage'),
                 'canEditUnit' => $request->user()->hasAnyPermission('units.edit|classes.manage'),
                 'canAssignLecturer' => $request->user()->hasAnyPermission('units.manage|lecturers.manage|classes.manage'),
+                'canManageCourseScoreLevels' => $request->user()->hasAnyPermission('courses.manage|classes.manage'),
             ],
         ]);
     }
@@ -151,9 +152,12 @@ class CourseManagementController extends Controller
             'duration' => ['required_if:duration_type,custom', 'nullable', 'max:80'],
             'fees' => ['required', 'numeric', 'min:0'],
             'has_units' => ['boolean'],
+            'grading_mode' => ['nullable', Rule::in(['grade_only', 'score_levels', 'score_levels_with_grades'])],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
+
+        $data['grading_mode'] ??= 'score_levels_with_grades';
 
         if ($data['duration_type'] === 'semesters') {
             $data['duration'] = null;
@@ -175,12 +179,15 @@ class CourseManagementController extends Controller
             'code' => ['required', 'max:30', Rule::unique('units')->where('course_id', $request->input('course_id'))->ignore($unit)->whereNull('deleted_at')],
             'name' => ['required', 'max:255'],
             'duration' => ['nullable', 'max:80'],
+            'grading_mode' => ['nullable', Rule::in(['grade_only', 'score_levels', 'score_levels_with_grades'])],
             'credit_hours' => ['required', 'integer', 'min:1'],
             'year_level' => ['required', 'integer', 'min:1'],
             'semester_sequence' => ['required', 'integer', 'min:1'],
             'is_core' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
+
+        $data['grading_mode'] ??= 'score_levels_with_grades';
 
         $course = Course::findOrFail($data['course_id']);
         if ((int) $course->department_id !== (int) $data['department_id']) {

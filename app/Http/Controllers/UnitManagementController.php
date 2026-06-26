@@ -20,7 +20,7 @@ class UnitManagementController extends Controller
 
         return Inertia::render('Academics/Units', [
             'units' => Unit::query()
-                ->with(['course:id,code,name,has_units', 'department:id,code,name'])
+                ->with(['course:id,code,name,has_units', 'department:id,code,name', 'scoreLevels'])
                 ->withCount(['lecturerAssignments', 'enrollments'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('code', 'like', "%{$search}%")
@@ -41,6 +41,7 @@ class UnitManagementController extends Controller
                 'canAdd' => $request->user()->hasAnyPermission('units.add|classes.manage'),
                 'canEdit' => $request->user()->hasAnyPermission('units.edit|classes.manage'),
                 'canDelete' => $request->user()->hasAnyPermission('units.delete|classes.manage'),
+                'canManageScoreLevels' => $request->user()->hasAnyPermission('units.manage|classes.manage'),
             ],
         ]);
     }

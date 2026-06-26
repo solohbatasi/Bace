@@ -12,8 +12,24 @@ const showingModal = ref(false);
 const deletingUnit = ref(null);
 const courseSelectOpen = ref(false);
 const courseSearch = ref('');
+const showingScoreLevelModal = ref(false);
+const selectedScoreUnit = ref(null);
 const filter = reactive({ search: props.filters.search || '', course_id: props.filters.course_id || '', department_id: props.filters.department_id || '' });
-const form = useForm({ id: null, course_id: '', department_id: '', code: '', name: '', duration: '', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
+const form = useForm({ id: null, course_id: '', department_id: '', code: '', name: '', duration: '', grading_mode: 'score_levels_with_grades', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
+const scoreLevelForm = useForm({ grading_mode: 'score_levels_with_grades', levels: [] });
+const defaultScoreLevels = [
+    [0, 50],
+    [50, 75],
+    [75, 100],
+].map(([min, max]) => ({ min_score: min, max_score: max, grade: '', comment: '' }));
+const defaultGradeLevels = [{ min_score: null, max_score: null, grade: '', comment: '' }];
+const modeUsesGrade = (mode) => ['grade_only', 'score_levels_with_grades'].includes(mode);
+const modeUsesRange = (mode) => ['score_levels', 'score_levels_with_grades'].includes(mode);
+const modeFromFlags = (usesGrade, usesRange) => {
+    if (usesGrade && usesRange) return 'score_levels_with_grades';
+    if (usesRange) return 'score_levels';
+    return 'grade_only';
+};
 
 const formCourses = computed(() => {
     const search = courseSearch.value.toLowerCase();
@@ -34,6 +50,7 @@ const stats = computed(() => ({
     core: props.units.data.filter((unit) => unit.is_core).length,
     assignments: props.units.data.reduce((sum, unit) => sum + unit.lecturer_assignments_count, 0),
 }));
+const scoreLevelError = computed(() => Object.values(scoreLevelForm.errors)[0]);
 
 watch(filter, () => router.get(route('academics.units.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
@@ -45,6 +62,7 @@ const resetForm = () => {
     form.code = '';
     form.name = '';
     form.duration = '';
+    form.grading_mode = 'score_levels_with_grades';
     form.credit_hours = 3;
     form.year_level = 1;
     form.semester_sequence = 1;
@@ -65,6 +83,7 @@ const edit = (unit) => {
     form.code = unit.code;
     form.name = unit.name;
     form.duration = unit.duration || '';
+    form.grading_mode = unit.grading_mode || 'score_levels_with_grades';
     form.credit_hours = unit.credit_hours;
     form.year_level = unit.year_level;
     form.semester_sequence = unit.semester_sequence;
@@ -111,6 +130,61 @@ const confirmDeleteUnit = () => {
         preserveScroll: true,
         onSuccess: closeDeleteModal,
     });
+};
+const scoreLevelRows = (levels, mode = 'score_levels_with_grades') => (levels?.length ? levels : (mode === 'grade_only' ? defaultGradeLevels : defaultScoreLevels)).map((level) => ({
+    min_score: level.min_score,
+    max_score: level.max_score,
+    grade: level.grade || '',
+    comment: level.comment || '',
+}));
+const openScoreLevelModal = (unit) => {
+    selectedScoreUnit.value = unit;
+    scoreLevelForm.clearErrors();
+    scoreLevelForm.grading_mode = unit.grading_mode || 'score_levels_with_grades';
+    scoreLevelForm.levels = scoreLevelRows(unit.score_levels, scoreLevelForm.grading_mode);
+    showingScoreLevelModal.value = true;
+};
+const closeScoreLevelModal = () => {
+    showingScoreLevelModal.value = false;
+    selectedScoreUnit.value = null;
+    scoreLevelForm.clearErrors();
+    scoreLevelForm.grading_mode = 'score_levels_with_grades';
+    scoreLevelForm.levels = [];
+};
+const addScoreLevel = () => {
+    scoreLevelForm.levels.push(modeUsesRange(scoreLevelForm.grading_mode)
+        ? { min_score: '', max_score: '', grade: '', comment: '' }
+        : { min_score: null, max_score: null, grade: '', comment: '' });
+};
+const removeScoreLevel = (index) => {
+    scoreLevelForm.levels.splice(index, 1);
+};
+const saveScoreLevels = () => {
+    if (!selectedScoreUnit.value) return;
+
+    scoreLevelForm.put(route('academics.units.score-levels.update', selectedScoreUnit.value.id), {
+        preserveScroll: true,
+        onSuccess: closeScoreLevelModal,
+    });
+};
+const setUnitGradingFlag = (flag, checked) => {
+    form.grading_mode = modeFromFlags(
+        flag === 'grade' ? checked : modeUsesGrade(form.grading_mode),
+        flag === 'range' ? checked : modeUsesRange(form.grading_mode),
+    );
+};
+const setScoreLevelGradingFlag = (flag, checked) => {
+    const nextMode = modeFromFlags(
+        flag === 'grade' ? checked : modeUsesGrade(scoreLevelForm.grading_mode),
+        flag === 'range' ? checked : modeUsesRange(scoreLevelForm.grading_mode),
+    );
+
+    scoreLevelForm.grading_mode = nextMode;
+    if (!scoreLevelForm.levels.length) {
+        scoreLevelForm.levels = scoreLevelRows([], nextMode);
+    } else if (modeUsesRange(nextMode) && scoreLevelForm.levels.every((level) => level.min_score === null || level.min_score === '')) {
+        scoreLevelForm.levels = scoreLevelRows([], nextMode);
+    }
 };
 </script>
 
@@ -181,6 +255,7 @@ const confirmDeleteUnit = () => {
                             </div>
                         </td>
                         <td class="px-5 py-4 text-right">
+                            <button v-if="permissions?.canManageScoreLevels" class="mr-2 rounded-md border border-violet-500/30 px-2.5 py-1.5 text-xs text-violet-600 hover:border-violet-400 dark:text-violet-300" @click="openScoreLevelModal(unit)">Score Levels</button>
                             <button v-if="permissions?.canEdit" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(unit)">Edit</button>
                             <button v-if="permissions?.canDelete" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyUnit(unit)">Delete</button>
                         </td>
@@ -258,6 +333,19 @@ const confirmDeleteUnit = () => {
                         <input v-model="form.duration" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional, e.g. 6 weeks">
                     </div>
                     <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Grading</label>
+                        <div class="mt-2 flex flex-wrap gap-3 text-sm">
+                            <label class="flex items-center gap-2">
+                                <input :checked="modeUsesGrade(form.grading_mode)" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500" @change="setUnitGradingFlag('grade', $event.target.checked)">
+                                Grade
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input :checked="modeUsesRange(form.grading_mode)" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500" @change="setUnitGradingFlag('range', $event.target.checked)">
+                                Range
+                            </label>
+                        </div>
+                    </div>
+                    <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Credit hours</label>
                         <input v-model="form.credit_hours" type="number" min="1" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
                     </div>
@@ -284,6 +372,67 @@ const confirmDeleteUnit = () => {
             <template #footer>
                 <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeModal">Cancel</button>
                 <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="unit-crud-form" type="submit" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save unit' }}</button>
+            </template>
+        </DialogModal>
+
+        <DialogModal :show="showingScoreLevelModal" max-width="4xl" @close="closeScoreLevelModal">
+            <template #title>Unit Score Levels</template>
+            <template #content>
+                <form id="unit-score-level-form" class="space-y-3" @submit.prevent="saveScoreLevels">
+                    <div class="rounded-md bg-gray-50 p-3 text-sm dark:bg-[#151a25]">
+                        <p class="font-semibold text-gray-900 dark:text-white">{{ selectedScoreUnit?.code }} - {{ selectedScoreUnit?.name }}</p>
+                        <p class="mt-1 text-xs text-gray-500">Set score ranges, grades, and comments for this unit.</p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Use</label>
+                        <div class="mt-2 flex flex-wrap gap-3 text-sm">
+                            <label class="flex items-center gap-2">
+                                <input :checked="modeUsesGrade(scoreLevelForm.grading_mode)" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500" @change="setScoreLevelGradingFlag('grade', $event.target.checked)">
+                                Grade
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input :checked="modeUsesRange(scoreLevelForm.grading_mode)" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500" @change="setScoreLevelGradingFlag('range', $event.target.checked)">
+                                Range
+                            </label>
+                        </div>
+                    </div>
+
+                    <p v-if="scoreLevelError" class="text-xs text-red-400">{{ scoreLevelError }}</p>
+
+                    <div class="overflow-x-auto rounded-md border border-gray-200 dark:border-[#2a3040]">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
+                            <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
+                                <tr>
+                                    <th v-if="modeUsesRange(scoreLevelForm.grading_mode)" class="px-3 py-2">From</th>
+                                    <th v-if="modeUsesRange(scoreLevelForm.grading_mode)" class="px-3 py-2">To</th>
+                                    <th v-if="modeUsesGrade(scoreLevelForm.grading_mode)" class="px-3 py-2">Grade</th>
+                                    <th class="px-3 py-2">Comment</th>
+                                    <th class="px-3 py-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
+                                <tr v-for="(level, index) in scoreLevelForm.levels" :key="index">
+                                    <td v-if="modeUsesRange(scoreLevelForm.grading_mode)" class="px-3 py-2"><input v-model="level.min_score" type="number" min="0" max="100" step="0.01" class="w-24 rounded-md border-gray-200 bg-white text-sm dark:border-[#2a3040] dark:bg-[#0c0f16]" required></td>
+                                    <td v-if="modeUsesRange(scoreLevelForm.grading_mode)" class="px-3 py-2"><input v-model="level.max_score" type="number" min="0" max="100" step="0.01" class="w-24 rounded-md border-gray-200 bg-white text-sm dark:border-[#2a3040] dark:bg-[#0c0f16]" required></td>
+                                    <td v-if="modeUsesGrade(scoreLevelForm.grading_mode)" class="px-3 py-2"><input v-model="level.grade" class="w-28 rounded-md border-gray-200 bg-white text-sm dark:border-[#2a3040] dark:bg-[#0c0f16]" placeholder="A, B, Pass" required></td>
+                                    <td class="px-3 py-2"><input v-model="level.comment" class="w-full min-w-48 rounded-md border-gray-200 bg-white text-sm dark:border-[#2a3040] dark:bg-[#0c0f16]" placeholder="Excellent, Pass, Retry"></td>
+                                    <td class="px-3 py-2 text-right"><button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-400" type="button" @click="removeScoreLevel(index)">Remove</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <button class="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-violet-600 hover:border-violet-400 dark:border-[#2a3040] dark:text-violet-300" type="button" @click="addScoreLevel">
+                        + Add range
+                    </button>
+                </form>
+            </template>
+            <template #footer>
+                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeScoreLevelModal">Cancel</button>
+                <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="unit-score-level-form" type="submit" :disabled="scoreLevelForm.processing">
+                    {{ scoreLevelForm.processing ? 'Saving...' : 'Save score levels' }}
+                </button>
             </template>
         </DialogModal>
 
