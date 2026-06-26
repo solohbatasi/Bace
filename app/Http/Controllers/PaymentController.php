@@ -29,9 +29,8 @@ class PaymentController extends Controller
                 ->with([
                     'course:id,code,name,fees',
                     'enrollments.unit.course:id,code,name,fees',
-                    'semesterRegistrations:id,student_id,class_id,course_fee',
-                    'semesterRegistrations.class:id,course_id',
-                    'semesterRegistrations.class.course:id,code,name,fees',
+                    'semesterRegistrations:id,student_id,class_id,course_id,course_fee',
+                    'semesterRegistrations.course:id,code,name,fees',
                     'payments:id,student_id,course_id,amount,status',
                 ])
                 ->orderBy('admission_number')
@@ -122,13 +121,13 @@ class PaymentController extends Controller
 
         $courses = collect([$student->course])
             ->merge($student->enrollments->pluck('unit.course'))
-            ->merge($student->semesterRegistrations->pluck('class.course'))
+            ->merge($student->semesterRegistrations->pluck('course'))
             ->filter()
             ->unique('id')
             ->values()
             ->map(function ($course) use ($paidByCourse, $student) {
                 $registration = $student->semesterRegistrations
-                    ->first(fn ($registration) => (int) $registration->class?->course_id === (int) $course->id);
+                    ->first(fn ($registration) => (int) $registration->course_id === (int) $course->id);
                 $fees = match (true) {
                     (int) $course->id === (int) $student->course_id && $student->course_fee !== null => (float) $student->course_fee,
                     $registration?->course_fee !== null => (float) $registration->course_fee,
@@ -157,7 +156,7 @@ class PaymentController extends Controller
     {
         return collect([$student->course_id])
             ->merge($student->enrollments->pluck('unit.course_id'))
-            ->merge($student->semesterRegistrations->pluck('class.course_id'))
+            ->merge($student->semesterRegistrations->pluck('course_id'))
             ->filter()
             ->unique()
             ->values();
@@ -177,7 +176,7 @@ class PaymentController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
-        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations.class:id,course_id'])->findOrFail($data['student_id']);
+        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations:id,student_id,course_id'])->findOrFail($data['student_id']);
         if (($data['course_id'] ?? null) && ! $this->studentCourseIds($student)->contains((int) $data['course_id'])) {
             throw ValidationException::withMessages([
                 'course_id' => 'The selected learner is not enrolled in that course.',
@@ -189,7 +188,7 @@ class PaymentController extends Controller
 
     private function paymentAllocations(Request $request, array $data): array
     {
-        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations.class:id,course_id'])->findOrFail($data['student_id']);
+        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations:id,student_id,course_id'])->findOrFail($data['student_id']);
         $allowedCourseIds = $this->studentCourseIds($student);
 
         $hasAllocationRows = collect($request->input('allocations', []))->isNotEmpty();

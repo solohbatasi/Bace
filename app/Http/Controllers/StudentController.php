@@ -39,7 +39,8 @@ class StudentController extends Controller
                     'class:id,name,code',
                     'enrollments.unit:id,course_id',
                     'semesterRegistrations.enrollments:id,semester_registration_id,unit_id',
-                    'semesterRegistrations.class.course:id,name,code,department_id,fees',
+                    'semesterRegistrations.course:id,name,code,department_id,fees',
+                    'semesterRegistrations.class:id,course_id',
                     'payments' => fn ($query) => $query
                         ->where('status', 'confirmed')
                         ->select(['id', 'student_id', 'course_id', 'amount', 'status']),
@@ -52,7 +53,7 @@ class StudentController extends Controller
                 ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
                 ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where(fn ($query) => $query
                     ->where('course_id', $courseId)
-                    ->orWhereHas('semesterRegistrations.class', fn ($query) => $query->where('course_id', $courseId))))
+                    ->orWhereHas('semesterRegistrations', fn ($query) => $query->where('course_id', $courseId))))
                 ->when($filters['class_id'] ?? null, fn ($query, $classId) => $query->where('class_id', $classId))
                 ->latest()
                 ->paginate(20)
@@ -393,7 +394,7 @@ class StudentController extends Controller
                 'primary' => true,
             ],
         ])->merge($student->semesterRegistrations->map(function (SemesterRegistration $registration) use ($student) {
-            $course = $registration->class?->course;
+            $course = $registration->course ?: $registration->class?->course;
 
             return [
                 'id' => $course?->id,
@@ -463,12 +464,13 @@ class StudentController extends Controller
         $registration = SemesterRegistration::where('student_id', $student->id)
             ->where('semester_id', $semesterId)
             ->where('academic_year_id', $academicYearId)
-            ->whereHas('class', fn ($query) => $query->where('course_id', $courseId))
+            ->where('course_id', $courseId)
             ->first();
 
         if ($registration) {
             $registration->update([
                 'class_id' => $class->id,
+                'course_id' => $courseId,
                 'course_fee' => $courseFee !== null && $courseFee !== '' ? $courseFee : null,
                 'approved_at' => $registration->approved_at ?: now(),
                 'approved_by' => $registration->approved_by ?: $userId,
@@ -480,6 +482,7 @@ class StudentController extends Controller
             $registration = SemesterRegistration::create([
                 'student_id' => $student->id,
                 'class_id' => $class->id,
+                'course_id' => $courseId,
                 'course_fee' => $courseFee !== null && $courseFee !== '' ? $courseFee : null,
                 'semester_id' => $semesterId,
                 'academic_year_id' => $academicYearId,
@@ -503,6 +506,7 @@ class StudentController extends Controller
             Enrollment::create([
                 'semester_registration_id' => $registration->id,
                 'student_id' => $student->id,
+                'course_id' => $courseId,
                 'unit_id' => $unit->id,
                 'class_id' => $class->id,
                 'semester_id' => $semesterId,

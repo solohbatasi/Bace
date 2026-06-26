@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
@@ -21,11 +21,23 @@ const form = useForm({
     unit_ids: [],
 });
 const transferForm = useForm({ class_id: '', unit_ids: [], notes: '' });
+const scoreForms = reactive({});
 
 const register = () => form.post(route('academics.enrollments.register'), { preserveScroll: true, onSuccess: () => form.reset('unit_ids') });
 const approve = (registration) => router.post(route('academics.enrollments.approve', registration.id), {}, { preserveScroll: true });
 const drop = (registration) => router.post(route('academics.enrollments.drop', registration.id), { notes: 'Dropped by administrator' }, { preserveScroll: true });
 const transfer = (registration) => transferForm.post(route('academics.enrollments.transfer', registration.id), { preserveScroll: true });
+const scoreForm = (registration) => {
+    if (!scoreForms[registration.id]) {
+        scoreForms[registration.id] = {
+            course_score: registration.course_score ?? '',
+            course_grade: registration.course_grade ?? '',
+        };
+    }
+
+    return scoreForms[registration.id];
+};
+const saveScore = (registration) => router.post(route('academics.enrollments.score', registration.id), scoreForm(registration), { preserveScroll: true });
 </script>
 
 <template>
@@ -76,7 +88,7 @@ const transfer = (registration) => transferForm.post(route('academics.enrollment
                         <tr>
                             <th class="px-4 py-3">Student</th>
                             <th class="px-4 py-3">Term</th>
-                            <th class="px-4 py-3">Units</th>
+                            <th class="px-4 py-3">Units / Score</th>
                             <th class="px-4 py-3">Status</th>
                             <th v-if="canManage" class="px-4 py-3 text-right">Actions</th>
                         </tr>
@@ -89,8 +101,19 @@ const transfer = (registration) => transferForm.post(route('academics.enrollment
                             </td>
                             <td class="px-4 py-4 text-gray-600 dark:text-gray-300">{{ registration.academic_year?.name }} / {{ registration.semester?.name }}</td>
                             <td class="px-4 py-4">
-                                <div class="flex flex-wrap gap-1">
+                                <div v-if="registration.enrollments.length" class="flex flex-wrap gap-1">
                                     <span v-for="enrollment in registration.enrollments" :key="enrollment.id" class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 dark:bg-[#1a1f2b] dark:text-gray-300">{{ enrollment.unit?.code }}</span>
+                                </div>
+                                <div v-else>
+                                    <p class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ registration.course?.code }} - {{ registration.course?.name }}</p>
+                                    <form v-if="canManage" class="mt-2 flex flex-wrap items-center gap-2" @submit.prevent="saveScore(registration)">
+                                        <input v-model="scoreForm(registration).course_score" type="number" min="0" max="100" step="0.01" class="h-8 w-24 rounded-md border-gray-200 text-xs dark:border-[#2a3040] dark:bg-[#0c0f16]" placeholder="Score">
+                                        <input v-model="scoreForm(registration).course_grade" class="h-8 w-24 rounded-md border-gray-200 text-xs dark:border-[#2a3040] dark:bg-[#0c0f16]" placeholder="Grade">
+                                        <button class="h-8 rounded-md border border-violet-500/40 px-2.5 text-xs font-semibold text-violet-600 dark:text-violet-300" type="submit">Save</button>
+                                    </form>
+                                    <p v-else class="text-xs text-gray-500">
+                                        Score {{ registration.course_score ?? '-' }} / Grade {{ registration.course_grade ?? '-' }}
+                                    </p>
                                 </div>
                             </td>
                             <td class="px-4 py-4">

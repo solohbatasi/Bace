@@ -37,6 +37,11 @@ class CourseManagementController extends Controller
                 ->withQueryString(),
             'filters' => $filters,
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
+            'unitCourses' => Course::query()
+                ->where('has_units', true)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'department_id', 'code', 'name', 'has_units']),
             'lecturers' => Lecturer::orderBy('last_name')->get(['id', 'title', 'first_name', 'last_name', 'department_id']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
             'semesters' => Semester::orderByDesc('starts_on')->get(['id', 'name', 'academic_year_id']),
@@ -128,30 +133,54 @@ class CourseManagementController extends Controller
 
     private function courseData(Request $request, ?Course $course = null): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'department_id' => ['required', 'exists:departments,id'],
             'code' => ['required', 'max:30', Rule::unique('courses')->ignore($course)->whereNull('deleted_at')],
             'name' => ['required', 'max:255'],
             'qualification_level' => ['nullable', 'max:80'],
-            'duration_semesters' => ['required', 'integer', 'min:1'],
+            'duration_type' => ['required', Rule::in(['semesters', 'custom'])],
+            'duration_semesters' => ['required_if:duration_type,semesters', 'nullable', 'integer', 'min:1'],
+            'duration' => ['required_if:duration_type,custom', 'nullable', 'max:80'],
             'fees' => ['required', 'numeric', 'min:0'],
+            'has_units' => ['boolean'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
+
+        if ($data['duration_type'] === 'semesters') {
+            $data['duration'] = null;
+        } else {
+            $data['duration_semesters'] = null;
+        }
+
+        return $data;
     }
 
     private function unitData(Request $request, ?Unit $unit = null): array
     {
-        return $request->validate([
-            'course_id' => ['required', 'exists:courses,id'],
+        $data = $request->validate([
+            'course_id' => [
+                'required',
+                Rule::exists('courses', 'id')->where('has_units', true)->where('is_active', true),
+            ],
             'department_id' => ['required', 'exists:departments,id'],
             'code' => ['required', 'max:30', Rule::unique('units')->where('course_id', $request->input('course_id'))->ignore($unit)->whereNull('deleted_at')],
             'name' => ['required', 'max:255'],
+            'duration' => ['nullable', 'max:80'],
             'credit_hours' => ['required', 'integer', 'min:1'],
             'year_level' => ['required', 'integer', 'min:1'],
             'semester_sequence' => ['required', 'integer', 'min:1'],
             'is_core' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
+
+        $course = Course::findOrFail($data['course_id']);
+        if ((int) $course->department_id !== (int) $data['department_id']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'department_id' => 'The selected course does not belong to this department.',
+            ]);
+        }
+
+        return $data;
     }
 }

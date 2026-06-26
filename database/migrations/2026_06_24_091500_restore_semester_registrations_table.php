@@ -14,6 +14,7 @@ return new class extends Migration
                 $table->id();
                 $table->foreignId('student_id')->constrained()->restrictOnDelete();
                 $table->foreignId('class_id')->constrained()->restrictOnDelete();
+                $table->foreignId('course_id')->nullable()->constrained()->nullOnDelete();
                 $table->foreignId('semester_id')->constrained()->restrictOnDelete();
                 $table->foreignId('academic_year_id')->constrained()->restrictOnDelete();
                 $table->timestampTz('registered_at');
@@ -28,6 +29,7 @@ return new class extends Migration
                 $table->timestampsTz();
 
                 $table->index(['student_id', 'academic_year_id', 'semester_id']);
+                $table->index(['student_id', 'course_id', 'academic_year_id', 'semester_id'], 'semester_reg_course_term_index');
                 $table->index(['status', 'registered_at']);
             });
         }

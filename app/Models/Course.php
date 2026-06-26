@@ -16,7 +16,9 @@ class Course extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'duration_semesters' => 'integer',
         'fees' => 'decimal:2',
+        'has_units' => 'boolean',
         'is_active' => 'boolean',
     ];
 

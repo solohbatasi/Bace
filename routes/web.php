@@ -94,6 +94,7 @@ Route::middleware([
         Route::post('enrollments/{registration}/approve', [EnrollmentManagementController::class, 'approve'])->name('enrollments.approve');
         Route::post('enrollments/{registration}/drop', [EnrollmentManagementController::class, 'drop'])->name('enrollments.drop');
         Route::post('enrollments/{registration}/transfer', [EnrollmentManagementController::class, 'transfer'])->name('enrollments.transfer');
+        Route::post('enrollments/{registration}/score', [EnrollmentManagementController::class, 'score'])->name('enrollments.score');
 
         Route::get('assignments', [AssignmentManagementController::class, 'index'])->name('assignments.index');
         Route::post('assignments', [AssignmentManagementController::class, 'store'])->name('assignments.store');
