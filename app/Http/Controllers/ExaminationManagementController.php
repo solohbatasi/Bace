@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Models\Course;
+use App\Models\Department;
 use App\Models\Examination;
 use App\Models\Semester;
 use App\Models\Unit;
@@ -42,6 +43,7 @@ class ExaminationManagementController extends Controller
                 ->withQueryString(),
             'filters' => $filters,
             'scopeTypes' => Examination::SCOPE_TYPES,
+            'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'courses' => Course::orderBy('name')->get(['id', 'department_id', 'code', 'name', 'has_units']),
             'units' => Unit::with('course:id,code,name')->orderBy('code')->get(['id', 'course_id', 'department_id', 'code', 'name']),
             'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),

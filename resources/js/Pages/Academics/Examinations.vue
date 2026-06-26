@@ -1,6 +1,7 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
+import { onClickOutside } from '@vueuse/core';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
@@ -10,6 +11,7 @@ const props = defineProps({
     examinations: Object,
     filters: Object,
     scopeTypes: Array,
+    departments: Array,
     courses: Array,
     units: Array,
     academicYears: Array,
@@ -30,6 +32,7 @@ const filter = reactive({
 const form = useForm({
     id: null,
     owner_type: 'course',
+    department_id: '',
     course_id: '',
     unit_id: '',
     academic_year_id: props.academicYears.find((year) => year.is_current)?.id || '',
@@ -46,9 +49,42 @@ const form = useForm({
     is_active: true,
     description: '',
 });
+const searchableSelects = reactive({
+    department: { isOpen: false, search: '' },
+    course: { isOpen: false, search: '' },
+});
+const departmentDropdown = ref(null);
+const courseDropdown = ref(null);
+
+onClickOutside(departmentDropdown, () => {
+    searchableSelects.department.isOpen = false;
+});
+onClickOutside(courseDropdown, () => {
+    searchableSelects.course.isOpen = false;
+});
 
 watch(filter, () => router.get(route('academics.examinations.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
+const coursesForDepartment = (departmentId) => props.courses.filter((course) => !departmentId || Number(course.department_id) === Number(departmentId));
+const filteredDepartments = computed(() => {
+    const search = searchableSelects.department.search.toLowerCase();
+    if (!search) return props.departments;
+
+    return props.departments.filter((department) =>
+        department.name.toLowerCase().includes(search) ||
+        department.code.toLowerCase().includes(search)
+    );
+});
+const filteredCourses = computed(() => {
+    const search = searchableSelects.course.search.toLowerCase();
+    const courses = coursesForDepartment(form.department_id);
+    if (!search) return courses;
+
+    return courses.filter((course) =>
+        course.name.toLowerCase().includes(search) ||
+        course.code.toLowerCase().includes(search)
+    );
+});
 const filteredUnits = computed(() => props.units.filter((unit) => !form.course_id || Number(unit.course_id) === Number(form.course_id)));
 const semesterOptions = computed(() => props.semesters.filter((semester) => !form.academic_year_id || Number(semester.academic_year_id) === Number(form.academic_year_id)));
 const stats = computed(() => ({
@@ -58,6 +94,16 @@ const stats = computed(() => ({
     final: props.examinations.data.filter((exam) => exam.include_in_final_analysis).length,
 }));
 const firstError = computed(() => Object.values(form.errors)[0]);
+const selectedDepartmentLabel = computed(() => {
+    const department = props.departments.find((department) => Number(department.id) === Number(form.department_id));
+
+    return department ? `${department.code} - ${department.name}` : 'Select department';
+});
+const selectedCourseLabel = computed(() => {
+    const course = props.courses.find((course) => Number(course.id) === Number(form.course_id));
+
+    return course ? `${course.code} - ${course.name}` : (form.department_id ? 'Select course' : 'Select department first');
+});
 
 const scopeLabel = (scope) => ({
     permanent: 'All time',
@@ -69,6 +115,7 @@ const resetForm = () => {
     form.clearErrors();
     form.id = null;
     form.owner_type = 'course';
+    form.department_id = '';
     form.course_id = '';
     form.unit_id = '';
     form.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || '';
@@ -84,6 +131,10 @@ const resetForm = () => {
     form.include_in_final_analysis = true;
     form.is_active = true;
     form.description = '';
+    searchableSelects.department.search = '';
+    searchableSelects.course.search = '';
+    searchableSelects.department.isOpen = false;
+    searchableSelects.course.isOpen = false;
 };
 
 const openCreateModal = () => {
@@ -98,6 +149,7 @@ const edit = (examination) => {
     form.id = examination.id;
     form.owner_type = examination.unit_id ? 'unit' : 'course';
     form.course_id = examination.course_id || examination.unit?.course_id || '';
+    form.department_id = props.courses.find((course) => Number(course.id) === Number(form.course_id))?.department_id || '';
     form.unit_id = examination.unit_id || '';
     form.academic_year_id = examination.academic_year_id || '';
     form.semester_id = examination.semester_id || '';
@@ -122,14 +174,47 @@ const closeModal = () => {
 
 const onOwnerTypeChange = () => {
     form.unit_id = '';
-    if (form.owner_type === 'unit' && !form.course_id) {
-        form.course_id = props.courses[0]?.id || '';
-    }
 };
 
 const onCourseChange = () => {
     if (!filteredUnits.value.some((unit) => Number(unit.id) === Number(form.unit_id))) {
         form.unit_id = '';
+    }
+};
+
+const selectDepartment = (department) => {
+    form.department_id = department.id;
+    form.course_id = '';
+    form.unit_id = '';
+    searchableSelects.department.isOpen = false;
+    searchableSelects.department.search = '';
+};
+
+const selectCourse = (course) => {
+    form.course_id = course.id;
+    if (!form.department_id) {
+        form.department_id = course.department_id;
+    }
+    searchableSelects.course.isOpen = false;
+    searchableSelects.course.search = '';
+    onCourseChange();
+};
+
+const toggleDepartment = () => {
+    searchableSelects.department.isOpen = !searchableSelects.department.isOpen;
+    if (searchableSelects.department.isOpen) {
+        searchableSelects.course.isOpen = false;
+        nextTick(() => document.querySelector('#exam-department-search')?.focus());
+    }
+};
+
+const toggleCourse = () => {
+    if (!form.department_id) return;
+
+    searchableSelects.course.isOpen = !searchableSelects.course.isOpen;
+    if (searchableSelects.course.isOpen) {
+        searchableSelects.department.isOpen = false;
+        nextTick(() => document.querySelector('#exam-course-search')?.focus());
     }
 };
 
@@ -265,99 +350,194 @@ const confirmDelete = () => {
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]"><Pagination :links="examinations.links" /></div>
         </div>
 
-        <DialogModal :show="showingModal" max-width="3xl" @close="closeModal">
+        <DialogModal :show="showingModal" max-width="4xl" @close="closeModal">
             <template #title>{{ form.id ? 'Edit examination' : 'Create examination' }}</template>
             <template #content>
-                <form id="examination-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="save">
-                    <p v-if="firstError" class="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400 md:col-span-2">{{ firstError }}</p>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Applies to</label>
-                        <select v-model="form.owner_type" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" @change="onOwnerTypeChange">
-                            <option value="course">Course</option>
-                            <option value="unit">Unit</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course</label>
-                        <select v-model="form.course_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :required="form.owner_type === 'course'" @change="onCourseChange">
-                            <option value="">Select course</option>
-                            <option v-for="course in courses" :key="course.id" :value="course.id">{{ course.code }} - {{ course.name }}</option>
-                        </select>
-                    </div>
-                    <div v-if="form.owner_type === 'unit'">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Unit</label>
-                        <select v-model="form.unit_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                            <option value="">Select unit</option>
-                            <option v-for="unit in filteredUnits" :key="unit.id" :value="unit.id">{{ unit.code }} - {{ unit.name }}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Code</label>
-                        <input v-model="form.code" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Name</label>
-                        <input v-model="form.name" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Availability</label>
-                        <select v-model="form.scope_type" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
-                            <option value="permanent">All time</option>
-                            <option value="semester">Semester</option>
-                            <option value="period">Period</option>
-                        </select>
-                    </div>
-                    <div v-if="form.scope_type === 'semester'">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Academic year</label>
-                        <select v-model="form.academic_year_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required @change="onAcademicYearChange">
-                            <option value="">Select year</option>
-                            <option v-for="year in academicYears" :key="year.id" :value="year.id">{{ year.name }}</option>
-                        </select>
-                    </div>
-                    <div v-if="form.scope_type === 'semester'">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Semester</label>
-                        <select v-model="form.semester_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                            <option value="">Select semester</option>
-                            <option v-for="semester in semesterOptions" :key="semester.id" :value="semester.id">{{ semester.name }}</option>
-                        </select>
-                    </div>
-                    <div v-if="form.scope_type === 'period'">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Starts on</label>
-                        <input v-model="form.starts_on" type="date" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                    </div>
-                    <div v-if="form.scope_type === 'period'">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Ends on</label>
-                        <input v-model="form.ends_on" type="date" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Max score</label>
-                        <input v-model="form.max_score" type="number" min="0" step="0.01" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Weight %</label>
-                        <input v-model="form.weight_percent" type="number" min="0" max="100" step="0.01" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
-                    </div>
-                    <label class="flex items-center gap-2 text-sm">
-                        <input v-model="form.is_analysed" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
-                        Analysed
-                    </label>
-                    <label class="flex items-center gap-2 text-sm">
-                        <input v-model="form.include_in_final_analysis" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
-                        Include in final analysis
-                    </label>
-                    <label class="flex items-center gap-2 text-sm">
-                        <input v-model="form.is_active" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
-                        Active examination
-                    </label>
-                    <div class="md:col-span-2">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Description</label>
-                        <textarea v-model="form.description" rows="3" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" />
-                    </div>
+                <form id="examination-form" class="max-h-[70vh] space-y-4 overflow-y-auto pr-1 text-gray-700 dark:text-gray-300" @submit.prevent="save">
+                    <p v-if="firstError" class="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{{ firstError }}</p>
+
+                    <section class="rounded-md border border-gray-200 p-4 dark:border-[#2a3040]">
+                        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Owner</h3>
+                                <p class="text-xs text-gray-500">Attach this exam to a course or one of its units.</p>
+                            </div>
+                            <div class="inline-grid grid-cols-2 rounded-md border border-gray-200 bg-gray-50 p-1 text-xs font-semibold dark:border-[#2a3040] dark:bg-[#0c0f16]">
+                                <button type="button" class="rounded px-3 py-1.5 transition" :class="form.owner_type === 'course' ? 'bg-white text-violet-700 shadow-sm dark:bg-[#1a1f2b] dark:text-violet-300' : 'text-gray-500'" @click="form.owner_type = 'course'; onOwnerTypeChange()">Course</button>
+                                <button type="button" class="rounded px-3 py-1.5 transition" :class="form.owner_type === 'unit' ? 'bg-white text-violet-700 shadow-sm dark:bg-[#1a1f2b] dark:text-violet-300' : 'text-gray-500'" @click="form.owner_type = 'unit'; onOwnerTypeChange()">Unit</button>
+                            </div>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div ref="departmentDropdown" class="relative">
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Department</label>
+                                <button
+                                    type="button"
+                                    class="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-left text-sm text-gray-900 transition focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                                    @click="toggleDepartment"
+                                >
+                                    <span class="truncate">{{ selectedDepartmentLabel }}</span>
+                                    <span class="text-xs text-gray-400">v</span>
+                                </button>
+                                <div v-if="searchableSelects.department.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                    <input
+                                        id="exam-department-search"
+                                        v-model="searchableSelects.department.search"
+                                        type="text"
+                                        class="sticky top-0 w-full border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none dark:border-[#2a3040] dark:bg-[#1a1f2b] dark:text-white"
+                                        placeholder="Search department..."
+                                        @click.stop
+                                    >
+                                    <button
+                                        v-for="department in filteredDepartments"
+                                        :key="department.id"
+                                        type="button"
+                                        class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-[#2a3040]"
+                                        @click="selectDepartment(department)"
+                                    >
+                                        <span class="font-medium">{{ department.code }}</span>
+                                        <span class="text-gray-500"> - {{ department.name }}</span>
+                                    </button>
+                                    <div v-if="!filteredDepartments.length" class="px-3 py-2 text-sm text-gray-500">No departments found</div>
+                                </div>
+                            </div>
+
+                            <div ref="courseDropdown" class="relative">
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course</label>
+                                <button
+                                    type="button"
+                                    class="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-left text-sm text-gray-900 transition focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                                    :disabled="!form.department_id"
+                                    @click="toggleCourse"
+                                >
+                                    <span class="truncate">{{ selectedCourseLabel }}</span>
+                                    <span class="text-xs text-gray-400">v</span>
+                                </button>
+                                <div v-if="searchableSelects.course.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                    <input
+                                        id="exam-course-search"
+                                        v-model="searchableSelects.course.search"
+                                        type="text"
+                                        class="sticky top-0 w-full border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none dark:border-[#2a3040] dark:bg-[#1a1f2b] dark:text-white"
+                                        placeholder="Search course..."
+                                        @click.stop
+                                    >
+                                    <button
+                                        v-for="course in filteredCourses"
+                                        :key="course.id"
+                                        type="button"
+                                        class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-[#2a3040]"
+                                        @click="selectCourse(course)"
+                                    >
+                                        <span class="font-medium">{{ course.code }}</span>
+                                        <span class="text-gray-500"> - {{ course.name }}</span>
+                                    </button>
+                                    <div v-if="!filteredCourses.length" class="px-3 py-2 text-sm text-gray-500">No courses found</div>
+                                </div>
+                            </div>
+
+                            <div v-if="form.owner_type === 'unit'" class="md:col-span-2">
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Unit</label>
+                                <select v-model="form.unit_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                                    <option value="">{{ form.course_id ? 'Select unit' : 'Select course first' }}</option>
+                                    <option v-for="unit in filteredUnits" :key="unit.id" :value="unit.id">{{ unit.code }} - {{ unit.name }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-md border border-gray-200 p-4 dark:border-[#2a3040]">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Details</h3>
+                        <div class="mt-4 grid gap-4 md:grid-cols-[minmax(0,160px)_1fr]">
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Code</label>
+                                <input v-model="form.code" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Name</label>
+                                <input v-model="form.name" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Description</label>
+                            <textarea v-model="form.description" rows="3" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" />
+                        </div>
+                    </section>
+
+                    <section class="rounded-md border border-gray-200 p-4 dark:border-[#2a3040]">
+                        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Availability</h3>
+                                <p class="text-xs text-gray-500">Choose whether the exam is always available or tied to time.</p>
+                            </div>
+                            <div class="grid grid-cols-3 rounded-md border border-gray-200 bg-gray-50 p-1 text-xs font-semibold dark:border-[#2a3040] dark:bg-[#0c0f16]">
+                                <button v-for="scope in scopeTypes" :key="scope" type="button" class="rounded px-2 py-1.5 transition" :class="form.scope_type === scope ? 'bg-white text-violet-700 shadow-sm dark:bg-[#1a1f2b] dark:text-violet-300' : 'text-gray-500'" @click="form.scope_type = scope">{{ scopeLabel(scope) }}</button>
+                            </div>
+                        </div>
+
+                        <div v-if="form.scope_type === 'semester'" class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Academic year</label>
+                                <select v-model="form.academic_year_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required @change="onAcademicYearChange">
+                                    <option value="">Select year</option>
+                                    <option v-for="year in academicYears" :key="year.id" :value="year.id">{{ year.name }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Semester</label>
+                                <select v-model="form.semester_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                                    <option value="">Select semester</option>
+                                    <option v-for="semester in semesterOptions" :key="semester.id" :value="semester.id">{{ semester.name }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div v-if="form.scope_type === 'period'" class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Starts on</label>
+                                <input v-model="form.starts_on" type="date" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Ends on</label>
+                                <input v-model="form.ends_on" type="date" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-md border border-gray-200 p-4 dark:border-[#2a3040]">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Scoring And Analysis</h3>
+                        <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Max score</label>
+                                <input v-model="form.max_score" type="number" min="0" step="0.01" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Weight %</label>
+                                <input v-model="form.weight_percent" type="number" min="0" max="100" step="0.01" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional">
+                            </div>
+                        </div>
+                        <div class="mt-4 grid gap-3 md:grid-cols-3">
+                            <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
+                                <input v-model="form.is_analysed" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
+                                Analysed
+                            </label>
+                            <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
+                                <input v-model="form.include_in_final_analysis" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
+                                Final analysis
+                            </label>
+                            <label class="flex min-h-10 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm dark:border-[#2a3040]">
+                                <input v-model="form.is_active" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
+                                Active
+                            </label>
+                        </div>
+                    </section>
                 </form>
             </template>
             <template #footer>
-                <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeModal">Cancel</button>
-                <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="examination-form" type="submit" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save examination' }}</button>
+                <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button class="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeModal">Cancel</button>
+                    <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="examination-form" type="submit" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save examination' }}</button>
+                </div>
             </template>
         </DialogModal>
 
