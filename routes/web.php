@@ -15,6 +15,7 @@ use App\Http\Controllers\EnrollmentManagementController;
 use App\Http\Controllers\LecturerManagementController;
 use App\Http\Controllers\OrganisationSettingsController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ScoreLevelController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnitManagementController;
 use App\Models\Course;
@@ -86,12 +87,14 @@ Route::middleware([
         Route::post('courses', [CourseManagementController::class, 'storeCourse'])->name('courses.store')->middleware('permission:courses.add|classes.manage');
         Route::put('courses/{course}', [CourseManagementController::class, 'updateCourse'])->name('courses.update')->middleware('permission:courses.edit|classes.manage');
         Route::delete('courses/{course}', [CourseManagementController::class, 'destroyCourse'])->name('courses.destroy')->middleware('permission:courses.delete|classes.manage');
+        Route::put('courses/{course}/score-levels', [ScoreLevelController::class, 'updateCourse'])->name('courses.score-levels.update')->middleware('permission:courses.manage|classes.manage');
         Route::resource('departments', DepartmentManagementController::class)->except(['create', 'edit', 'show']);
         Route::resource('lecturers', LecturerManagementController::class)->except(['create', 'edit', 'show']);
         Route::get('units', [UnitManagementController::class, 'index'])->name('units.index')->middleware('permission:units.view|classes.manage');
         Route::post('units', [CourseManagementController::class, 'storeUnit'])->name('units.store')->middleware('permission:units.add|classes.manage');
         Route::put('units/{unit}', [CourseManagementController::class, 'updateUnit'])->name('units.update')->middleware('permission:units.edit|classes.manage');
         Route::delete('units/{unit}', [UnitManagementController::class, 'destroy'])->name('units.destroy')->middleware('permission:units.delete|classes.manage');
+        Route::put('units/{unit}/score-levels', [ScoreLevelController::class, 'updateUnit'])->name('units.score-levels.update')->middleware('permission:units.manage|classes.manage');
         Route::post('units/{unit}/lecturers', [CourseManagementController::class, 'assignLecturer'])->name('units.lecturers.store')->middleware('permission:units.manage|lecturers.manage|classes.manage');
 
         Route::get('enrollments', [EnrollmentManagementController::class, 'index'])->name('enrollments.index')->middleware('permission:enrollments.view|classes.manage');

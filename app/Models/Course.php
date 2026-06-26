@@ -41,4 +41,9 @@ class Course extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    public function scoreLevels(): HasMany
+    {
+        return $this->hasMany(ScoreLevel::class)->orderBy('sort_order')->orderBy('min_score');
+    }
 }
