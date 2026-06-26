@@ -29,4 +29,9 @@ class ScoreLevel extends Model
     {
         return $this->belongsTo(Unit::class);
     }
+
+    public function examination(): BelongsTo
+    {
+        return $this->belongsTo(Examination::class);
+    }
 }

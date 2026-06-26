@@ -25,7 +25,7 @@ class ExaminationManagementController extends Controller
 
         return Inertia::render('Academics/Examinations', [
             'examinations' => Examination::query()
-                ->with(['course:id,code,name,department_id', 'unit:id,code,name,course_id', 'unit.course:id,code,name', 'academicYear:id,name', 'semester:id,name'])
+                ->with(['course:id,code,name,department_id', 'unit:id,code,name,course_id', 'unit.course:id,code,name', 'academicYear:id,name', 'semester:id,name', 'scoreLevels'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%")
@@ -53,6 +53,7 @@ class ExaminationManagementController extends Controller
                 'canEdit' => $request->user()->hasAnyPermission('examinations.edit|classes.manage'),
                 'canDelete' => $request->user()->hasAnyPermission('examinations.delete|classes.manage'),
                 'canManage' => $request->user()->hasAnyPermission('examinations.manage|classes.manage'),
+                'canManageScoreLevels' => $request->user()->hasAnyPermission('examinations.manage|classes.manage'),
             ],
         ]);
     }
@@ -105,11 +106,13 @@ class ExaminationManagementController extends Controller
             'ends_on' => ['nullable', 'date', 'after_or_equal:starts_on'],
             'max_score' => ['nullable', 'numeric', 'min:0'],
             'weight_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'grading_mode' => ['nullable', Rule::in(['grade_only', 'score_levels', 'score_levels_with_grades'])],
             'is_analysed' => ['boolean'],
             'include_in_final_analysis' => ['boolean'],
             'is_active' => ['boolean'],
             'description' => ['nullable', 'string'],
         ]);
+        $data['grading_mode'] ??= 'score_levels_with_grades';
 
         if ($data['owner_type'] === 'course') {
             $data['unit_id'] = null;

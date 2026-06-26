@@ -102,6 +102,7 @@ Route::middleware([
         Route::post('examinations', [ExaminationManagementController::class, 'store'])->name('examinations.store')->middleware('permission:examinations.add|classes.manage');
         Route::put('examinations/{examination}', [ExaminationManagementController::class, 'update'])->name('examinations.update')->middleware('permission:examinations.edit|classes.manage');
         Route::delete('examinations/{examination}', [ExaminationManagementController::class, 'destroy'])->name('examinations.destroy')->middleware('permission:examinations.delete|classes.manage');
+        Route::put('examinations/{examination}/score-levels', [ScoreLevelController::class, 'updateExamination'])->name('examinations.score-levels.update')->middleware('permission:examinations.manage|classes.manage');
 
         Route::get('enrollments', [EnrollmentManagementController::class, 'index'])->name('enrollments.index')->middleware('permission:enrollments.view|classes.manage');
         Route::post('enrollments/register', [EnrollmentManagementController::class, 'register'])->name('enrollments.register')->middleware('permission:enrollments.add|classes.manage');

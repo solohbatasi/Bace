@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Examination extends Model
@@ -44,5 +45,10 @@ class Examination extends Model
     public function semester(): BelongsTo
     {
         return $this->belongsTo(Semester::class);
+    }
+
+    public function scoreLevels(): HasMany
+    {
+        return $this->hasMany(ScoreLevel::class)->orderBy('sort_order')->orderBy('min_score');
     }
 }
