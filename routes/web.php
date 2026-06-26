@@ -43,15 +43,20 @@ Route::middleware([
         Route::post('users/{user}/activate', [UserController::class, 'activate'])->name('users.activate');
         Route::post('users/{user}/terminate', [UserController::class, 'terminate'])->name('users.terminate');
 
-        Route::resource('roles', RoleController::class)->except(['create', 'edit', 'show']);
+        Route::resource('roles', RoleController::class)
+            ->except(['create', 'edit', 'show'])
+            ->middlewareFor('index', 'permission:roles.view')
+            ->middlewareFor('store', 'permission:roles.add')
+            ->middlewareFor('update', 'permission:roles.edit')
+            ->middlewareFor('destroy', 'permission:roles.delete');
         Route::resource('permissions', PermissionController::class)->except(['create', 'edit', 'show']);
 
-        Route::get('system-health', SystemHealthController::class)->name('system-health');
-        Route::delete('system-health/sessions/{session}', [SystemHealthController::class, 'destroySession'])->name('system-health.sessions.destroy');
-        Route::delete('system-health/tokens/{token}', [SystemHealthController::class, 'destroyToken'])->name('system-health.tokens.destroy');
+        Route::get('system-health', SystemHealthController::class)->name('system-health')->middleware('permission:system-health.view|health.view');
+        Route::delete('system-health/sessions/{session}', [SystemHealthController::class, 'destroySession'])->name('system-health.sessions.destroy')->middleware('permission:system-health.delete|tokens.revoke');
+        Route::delete('system-health/tokens/{token}', [SystemHealthController::class, 'destroyToken'])->name('system-health.tokens.destroy')->middleware('permission:api-tokens.delete|tokens.revoke');
 
-        Route::get('organisation-settings', [OrganisationSettingsController::class, 'index'])->name('organisation-settings.index');
-        Route::put('organisation-settings', [OrganisationSettingsController::class, 'update'])->name('organisation-settings.update');
+        Route::get('organisation-settings', [OrganisationSettingsController::class, 'index'])->name('organisation-settings.index')->middleware('permission:organisation-settings.view|classes.manage');
+        Route::put('organisation-settings', [OrganisationSettingsController::class, 'update'])->name('organisation-settings.update')->middleware('permission:organisation-settings.edit|classes.manage');
     });
 
     // Student routes - ADD THE ENROLL ROUTE HERE
@@ -59,49 +64,49 @@ Route::middleware([
     Route::post('students/enroll', [StudentController::class, 'enroll'])->name('students.enroll')->middleware('permission:students.view');
 
     Route::prefix('finance')->name('finance.')->group(function () {
-        Route::get('payments', [PaymentController::class, 'index'])->name('payments.index')->middleware('permission:finance.view');
-        Route::post('payments', [PaymentController::class, 'store'])->name('payments.store')->middleware('permission:finance.manage');
-        Route::put('payments/{payment}', [PaymentController::class, 'update'])->name('payments.update')->middleware('permission:finance.manage');
-        Route::delete('payments/{payment}', [PaymentController::class, 'destroy'])->name('payments.destroy')->middleware('permission:finance.manage');
+        Route::get('payments', [PaymentController::class, 'index'])->name('payments.index')->middleware('permission:payments.view|finance.view');
+        Route::post('payments', [PaymentController::class, 'store'])->name('payments.store')->middleware('permission:payments.add|finance.manage');
+        Route::put('payments/{payment}', [PaymentController::class, 'update'])->name('payments.update')->middleware('permission:payments.edit|finance.manage');
+        Route::delete('payments/{payment}', [PaymentController::class, 'destroy'])->name('payments.destroy')->middleware('permission:payments.delete|finance.manage');
     });
 
     Route::prefix('academics')->name('academics.')->group(function () {
-        Route::get('settings', [AcademicSettingsController::class, 'index'])->name('settings.index');
-        Route::post('settings/academic-years', [AcademicSettingsController::class, 'storeAcademicYear'])->name('settings.academic-years.store');
-        Route::put('settings/academic-years/{academicYear}', [AcademicSettingsController::class, 'updateAcademicYear'])->name('settings.academic-years.update');
-        Route::delete('settings/academic-years/{academicYear}', [AcademicSettingsController::class, 'destroyAcademicYear'])->name('settings.academic-years.destroy');
-        Route::post('settings/semesters', [AcademicSettingsController::class, 'storeSemester'])->name('settings.semesters.store');
-        Route::put('settings/semesters/{semester}', [AcademicSettingsController::class, 'updateSemester'])->name('settings.semesters.update');
-        Route::delete('settings/semesters/{semester}', [AcademicSettingsController::class, 'destroySemester'])->name('settings.semesters.destroy');
-        Route::post('settings/classes', [AcademicSettingsController::class, 'storeClass'])->name('settings.classes.store');
-        Route::put('settings/classes/{class}', [AcademicSettingsController::class, 'updateClass'])->name('settings.classes.update');
-        Route::delete('settings/classes/{class}', [AcademicSettingsController::class, 'destroyClass'])->name('settings.classes.destroy');
+        Route::get('settings', [AcademicSettingsController::class, 'index'])->name('settings.index')->middleware('permission:academic-settings.view|classes.manage');
+        Route::post('settings/academic-years', [AcademicSettingsController::class, 'storeAcademicYear'])->name('settings.academic-years.store')->middleware('permission:academic-years.add|classes.manage');
+        Route::put('settings/academic-years/{academicYear}', [AcademicSettingsController::class, 'updateAcademicYear'])->name('settings.academic-years.update')->middleware('permission:academic-years.edit|classes.manage');
+        Route::delete('settings/academic-years/{academicYear}', [AcademicSettingsController::class, 'destroyAcademicYear'])->name('settings.academic-years.destroy')->middleware('permission:academic-years.delete|classes.manage');
+        Route::post('settings/semesters', [AcademicSettingsController::class, 'storeSemester'])->name('settings.semesters.store')->middleware('permission:semesters.add|classes.manage');
+        Route::put('settings/semesters/{semester}', [AcademicSettingsController::class, 'updateSemester'])->name('settings.semesters.update')->middleware('permission:semesters.edit|classes.manage');
+        Route::delete('settings/semesters/{semester}', [AcademicSettingsController::class, 'destroySemester'])->name('settings.semesters.destroy')->middleware('permission:semesters.delete|classes.manage');
+        Route::post('settings/classes', [AcademicSettingsController::class, 'storeClass'])->name('settings.classes.store')->middleware('permission:classes.add|classes.manage');
+        Route::put('settings/classes/{class}', [AcademicSettingsController::class, 'updateClass'])->name('settings.classes.update')->middleware('permission:classes.edit|classes.manage');
+        Route::delete('settings/classes/{class}', [AcademicSettingsController::class, 'destroyClass'])->name('settings.classes.destroy')->middleware('permission:classes.delete|classes.manage');
 
-        Route::get('courses', [CourseManagementController::class, 'index'])->name('courses.index');
-        Route::post('courses', [CourseManagementController::class, 'storeCourse'])->name('courses.store');
-        Route::put('courses/{course}', [CourseManagementController::class, 'updateCourse'])->name('courses.update');
-        Route::delete('courses/{course}', [CourseManagementController::class, 'destroyCourse'])->name('courses.destroy');
+        Route::get('courses', [CourseManagementController::class, 'index'])->name('courses.index')->middleware('permission:courses.view|classes.manage');
+        Route::post('courses', [CourseManagementController::class, 'storeCourse'])->name('courses.store')->middleware('permission:courses.add|classes.manage');
+        Route::put('courses/{course}', [CourseManagementController::class, 'updateCourse'])->name('courses.update')->middleware('permission:courses.edit|classes.manage');
+        Route::delete('courses/{course}', [CourseManagementController::class, 'destroyCourse'])->name('courses.destroy')->middleware('permission:courses.delete|classes.manage');
         Route::resource('departments', DepartmentManagementController::class)->except(['create', 'edit', 'show']);
         Route::resource('lecturers', LecturerManagementController::class)->except(['create', 'edit', 'show']);
-        Route::get('units', [UnitManagementController::class, 'index'])->name('units.index');
-        Route::post('units', [CourseManagementController::class, 'storeUnit'])->name('units.store');
-        Route::put('units/{unit}', [CourseManagementController::class, 'updateUnit'])->name('units.update');
-        Route::delete('units/{unit}', [UnitManagementController::class, 'destroy'])->name('units.destroy');
-        Route::post('units/{unit}/lecturers', [CourseManagementController::class, 'assignLecturer'])->name('units.lecturers.store');
+        Route::get('units', [UnitManagementController::class, 'index'])->name('units.index')->middleware('permission:units.view|classes.manage');
+        Route::post('units', [CourseManagementController::class, 'storeUnit'])->name('units.store')->middleware('permission:units.add|classes.manage');
+        Route::put('units/{unit}', [CourseManagementController::class, 'updateUnit'])->name('units.update')->middleware('permission:units.edit|classes.manage');
+        Route::delete('units/{unit}', [UnitManagementController::class, 'destroy'])->name('units.destroy')->middleware('permission:units.delete|classes.manage');
+        Route::post('units/{unit}/lecturers', [CourseManagementController::class, 'assignLecturer'])->name('units.lecturers.store')->middleware('permission:units.manage|lecturers.manage|classes.manage');
 
-        Route::get('enrollments', [EnrollmentManagementController::class, 'index'])->name('enrollments.index');
-        Route::post('enrollments/register', [EnrollmentManagementController::class, 'register'])->name('enrollments.register');
-        Route::post('enrollments/{registration}/approve', [EnrollmentManagementController::class, 'approve'])->name('enrollments.approve');
-        Route::post('enrollments/{registration}/drop', [EnrollmentManagementController::class, 'drop'])->name('enrollments.drop');
-        Route::post('enrollments/{registration}/transfer', [EnrollmentManagementController::class, 'transfer'])->name('enrollments.transfer');
-        Route::post('enrollments/{registration}/score', [EnrollmentManagementController::class, 'score'])->name('enrollments.score');
+        Route::get('enrollments', [EnrollmentManagementController::class, 'index'])->name('enrollments.index')->middleware('permission:enrollments.view|classes.manage');
+        Route::post('enrollments/register', [EnrollmentManagementController::class, 'register'])->name('enrollments.register')->middleware('permission:enrollments.add|classes.manage');
+        Route::post('enrollments/{registration}/approve', [EnrollmentManagementController::class, 'approve'])->name('enrollments.approve')->middleware('permission:enrollments.edit|enrollments.manage|classes.manage');
+        Route::post('enrollments/{registration}/drop', [EnrollmentManagementController::class, 'drop'])->name('enrollments.drop')->middleware('permission:enrollments.delete|enrollments.manage|classes.manage');
+        Route::post('enrollments/{registration}/transfer', [EnrollmentManagementController::class, 'transfer'])->name('enrollments.transfer')->middleware('permission:enrollments.edit|enrollments.manage|classes.manage');
+        Route::post('enrollments/{registration}/score', [EnrollmentManagementController::class, 'score'])->name('enrollments.score')->middleware('permission:enrollments.edit|enrollments.manage|classes.manage');
 
-        Route::get('assignments', [AssignmentManagementController::class, 'index'])->name('assignments.index');
-        Route::post('assignments', [AssignmentManagementController::class, 'store'])->name('assignments.store');
-        Route::put('assignments/{assignment}', [AssignmentManagementController::class, 'update'])->name('assignments.update');
-        Route::post('assignments/{assignment}/publish', [AssignmentManagementController::class, 'publish'])->name('assignments.publish');
-        Route::post('assignments/{assignment}/submit', [AssignmentManagementController::class, 'submit'])->name('assignments.submit');
-        Route::get('assignments/{assignment}/attachments/{attachment}', [AssignmentManagementController::class, 'downloadAttachment'])->name('assignments.attachments.download');
+        Route::get('assignments', [AssignmentManagementController::class, 'index'])->name('assignments.index')->middleware('permission:assignments.view|assignments.manage');
+        Route::post('assignments', [AssignmentManagementController::class, 'store'])->name('assignments.store')->middleware('permission:assignments.add|assignments.manage');
+        Route::put('assignments/{assignment}', [AssignmentManagementController::class, 'update'])->name('assignments.update')->middleware('permission:assignments.edit|assignments.manage');
+        Route::post('assignments/{assignment}/publish', [AssignmentManagementController::class, 'publish'])->name('assignments.publish')->middleware('permission:assignments.manage');
+        Route::post('assignments/{assignment}/submit', [AssignmentManagementController::class, 'submit'])->name('assignments.submit')->middleware('permission:assignments.add|assignments.manage');
+        Route::get('assignments/{assignment}/attachments/{attachment}', [AssignmentManagementController::class, 'downloadAttachment'])->name('assignments.attachments.download')->middleware('permission:assignments.view|assignments.manage');
     });
 
     // API routes for fetching course units - ADD THIS

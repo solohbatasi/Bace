@@ -12,7 +12,7 @@ class EnsureUserHasPermission
     {
         $user = $request->user();
 
-        abort_unless($user && collect($permissions)->every(fn ($permission) => $user->hasPermission($permission)), 403);
+        abort_unless($user && collect($permissions)->every(fn ($permission) => $user->hasAnyPermission($permission)), 403);
 
         return $next($request);
     }

@@ -24,7 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->names('api.students')
         ->middleware('permission:students.view')
         ->except(['store', 'update', 'destroy']);
-    Route::post('students', [StudentController::class, 'store'])->middleware('permission:students.create');
-    Route::match(['put', 'patch'], 'students/{student}', [StudentController::class, 'update'])->middleware('permission:students.update');
+    Route::post('students', [StudentController::class, 'store'])->middleware('permission:students.add|students.create');
+    Route::match(['put', 'patch'], 'students/{student}', [StudentController::class, 'update'])->middleware('permission:students.edit|students.update');
     Route::delete('students/{student}', [StudentController::class, 'destroy'])->middleware('permission:students.delete');
 });

@@ -15,6 +15,7 @@ const props = defineProps({
     lecturers: Array,
     academicYearOptions: Array,
     semesterOptions: Array,
+    permissions: Object,
 });
 
 const initialTab = () => {
@@ -42,6 +43,24 @@ const singularLabel = computed(() => ({
     semesters: 'Semester',
     classes: 'Class',
 })[activeTab.value]);
+
+const canAddCurrent = computed(() => ({
+    academicYears: props.permissions?.canAddAcademicYear,
+    semesters: props.permissions?.canAddSemester,
+    classes: props.permissions?.canAddClass,
+})[activeTab.value]);
+
+const canEdit = (type) => ({
+    academicYears: props.permissions?.canEditAcademicYear,
+    semesters: props.permissions?.canEditSemester,
+    classes: props.permissions?.canEditClass,
+})[type];
+
+const canDelete = (type) => ({
+    academicYears: props.permissions?.canDeleteAcademicYear,
+    semesters: props.permissions?.canDeleteSemester,
+    classes: props.permissions?.canDeleteClass,
+})[type];
 
 const stats = computed(() => ({
     years: props.academicYears.total,
@@ -243,7 +262,7 @@ const selectCourse = () => {
                 </button>
             </div>
 
-            <button class="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal()">
+            <button v-if="canAddCurrent" class="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal()">
                 <span class="text-base leading-none">+</span>
                 Add {{ singularLabel }}
             </button>
@@ -269,8 +288,8 @@ const selectCourse = () => {
                             <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="year.is_current ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'">{{ year.is_current ? 'current' : 'archived' }}</span>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editAcademicYear(year)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" type="button" @click="askDelete('academicYears', year)">Delete</button>
+                            <button v-if="canEdit('academicYears')" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editAcademicYear(year)">Edit</button>
+                            <button v-if="canDelete('academicYears')" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" type="button" @click="askDelete('academicYears', year)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -297,8 +316,8 @@ const selectCourse = () => {
                             <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="semester.is_current ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'">{{ semester.is_current ? 'current' : 'inactive' }}</span>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editSemester(semester)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" type="button" @click="askDelete('semesters', semester)">Delete</button>
+                            <button v-if="canEdit('semesters')" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editSemester(semester)">Edit</button>
+                            <button v-if="canDelete('semesters')" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" type="button" @click="askDelete('semesters', semester)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -328,8 +347,8 @@ const selectCourse = () => {
                             <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="collegeClass.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'">{{ collegeClass.is_active ? 'active' : 'inactive' }}</span>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editClass(collegeClass)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" type="button" @click="askDelete('classes', collegeClass)">Delete</button>
+                            <button v-if="canEdit('classes')" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editClass(collegeClass)">Edit</button>
+                            <button v-if="canDelete('classes')" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" type="button" @click="askDelete('classes', collegeClass)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -338,7 +357,7 @@ const selectCourse = () => {
             <div v-else class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No records found</p>
                 <p class="mt-1 text-sm text-gray-500">Create a record for the selected tab.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCreateModal()">Add {{ singularLabel }}</button>
+                <button v-if="canAddCurrent" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCreateModal()">Add {{ singularLabel }}</button>
             </div>
 
             <div v-if="activePagination.links?.length" class="border-t border-gray-200 p-4 dark:border-[#232837]">

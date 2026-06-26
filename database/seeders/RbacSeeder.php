@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Support\AppPermissions;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -11,7 +12,7 @@ class RbacSeeder extends Seeder
 {
     public function run(): void
     {
-        $permissions = collect([
+        $legacyPermissions = [
             ['name' => 'users.view', 'group' => 'users', 'description' => 'View user accounts and filters.'],
             ['name' => 'users.create', 'group' => 'users', 'description' => 'Create user accounts.'],
             ['name' => 'users.update', 'group' => 'users', 'description' => 'Update users, roles, and permissions.'],
@@ -29,7 +30,9 @@ class RbacSeeder extends Seeder
             ['name' => 'classes.manage', 'group' => 'academics', 'description' => 'Manage classes, courses, units, and enrollments.'],
             ['name' => 'assignments.manage', 'group' => 'academics', 'description' => 'Manage assignments, submissions, and grading.'],
             ['name' => 'attendance.manage', 'group' => 'academics', 'description' => 'Manage attendance records.'],
-        ])->map(fn ($permission) => Permission::firstOrCreate(
+        ];
+
+        $permissions = collect([...AppPermissions::all(), ...$legacyPermissions])->map(fn ($permission) => Permission::updateOrCreate(
             ['name' => $permission['name']],
             ['group' => $permission['group'], 'description' => $permission['description']]
         ));
@@ -72,13 +75,70 @@ class RbacSeeder extends Seeder
         $superAdmin->permissions()->syncWithoutDetaching($permissions->pluck('id'));
         $administrator->permissions()->syncWithoutDetaching($permissions->pluck('id'));
         $registrar->permissions()->syncWithoutDetaching(
-            $permissions->whereIn('name', ['students.view', 'students.create', 'students.update', 'classes.manage'])->pluck('id')
+            $permissions->whereIn('name', [
+                'students.view',
+                'students.add',
+                'students.edit',
+                'academic-settings.view',
+                'academic-years.view',
+                'academic-years.add',
+                'academic-years.edit',
+                'academic-years.delete',
+                'semesters.view',
+                'semesters.add',
+                'semesters.edit',
+                'semesters.delete',
+                'classes.view',
+                'classes.add',
+                'classes.edit',
+                'classes.delete',
+                'departments.view',
+                'departments.add',
+                'departments.edit',
+                'departments.delete',
+                'courses.view',
+                'courses.add',
+                'courses.edit',
+                'courses.delete',
+                'units.view',
+                'units.add',
+                'units.edit',
+                'units.delete',
+                'lecturers.view',
+                'lecturers.add',
+                'lecturers.edit',
+                'lecturers.delete',
+                'enrollments.view',
+                'enrollments.add',
+                'enrollments.edit',
+                'enrollments.delete',
+                'students.create',
+                'students.update',
+                'classes.manage',
+            ])->pluck('id')
         );
         $financeOfficer->permissions()->syncWithoutDetaching(
-            $permissions->whereIn('name', ['students.view', 'finance.view', 'finance.manage'])->pluck('id')
+            $permissions->whereIn('name', [
+                'students.view',
+                'payments.view',
+                'payments.add',
+                'payments.edit',
+                'payments.delete',
+                'finance.view',
+                'finance.manage',
+            ])->pluck('id')
         );
         $lecturer->permissions()->syncWithoutDetaching(
-            $permissions->whereIn('name', ['students.view', 'assignments.manage', 'attendance.manage'])->pluck('id')
+            $permissions->whereIn('name', [
+                'students.view',
+                'enrollments.view',
+                'assignments.view',
+                'assignments.add',
+                'assignments.edit',
+                'assignments.delete',
+                'assignments.manage',
+                'attendance.manage',
+            ])->pluck('id')
         );
         $student->permissions()->syncWithoutDetaching(
             $permissions->whereIn('name', ['students.view'])->pluck('id')

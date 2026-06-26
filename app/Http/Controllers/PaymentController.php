@@ -17,12 +17,15 @@ class PaymentController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('finance.view'), 403);
+        abort_unless($request->user()->hasAnyPermission('payments.view|finance.view'), 403);
 
         $filters = $request->only(['search', 'student_id', 'course_id']);
 
         return Inertia::render('Finance/Payments', [
-            'canManage' => $request->user()->hasPermission('finance.manage'),
+            'canAdd' => $request->user()->hasAnyPermission('payments.add|finance.manage'),
+            'canEdit' => $request->user()->hasAnyPermission('payments.edit|finance.manage'),
+            'canDelete' => $request->user()->hasAnyPermission('payments.delete|finance.manage'),
+            'canManage' => $request->user()->hasAnyPermission('payments.add|payments.edit|payments.delete|finance.manage'),
             'filters' => $filters,
             'paymentDate' => now()->toDateString(),
             'students' => Student::query()
@@ -61,7 +64,7 @@ class PaymentController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('finance.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('payments.add|finance.manage'), 403);
 
         $data = $this->paymentData($request);
         $allocations = $this->paymentAllocations($request, $data);
@@ -88,7 +91,7 @@ class PaymentController extends Controller
 
     public function update(Request $request, Payment $payment): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('finance.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('payments.edit|finance.manage'), 403);
 
         $data = $this->paymentData($request, $payment);
         $data['payment_reference'] = $data['payment_reference'] ?: $payment->payment_reference;
@@ -102,7 +105,7 @@ class PaymentController extends Controller
 
     public function destroy(Request $request, Payment $payment): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('finance.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('payments.delete|finance.manage'), 403);
 
         $payment->forceFill([
             'deleted_by' => $request->user()->id,

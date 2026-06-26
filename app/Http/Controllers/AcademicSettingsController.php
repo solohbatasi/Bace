@@ -19,7 +19,7 @@ class AcademicSettingsController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('academic-settings.view|classes.manage'), 403);
 
         return Inertia::render('Academics/Settings', [
             'academicYears' => AcademicYear::query()
@@ -43,12 +43,23 @@ class AcademicSettingsController extends Controller
             'lecturers' => Lecturer::orderBy('last_name')->get(['id', 'department_id', 'title', 'first_name', 'last_name']),
             'academicYearOptions' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
             'semesterOptions' => Semester::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
+            'permissions' => [
+                'canAddAcademicYear' => $request->user()->hasAnyPermission('academic-years.add|classes.manage'),
+                'canEditAcademicYear' => $request->user()->hasAnyPermission('academic-years.edit|classes.manage'),
+                'canDeleteAcademicYear' => $request->user()->hasAnyPermission('academic-years.delete|classes.manage'),
+                'canAddSemester' => $request->user()->hasAnyPermission('semesters.add|classes.manage'),
+                'canEditSemester' => $request->user()->hasAnyPermission('semesters.edit|classes.manage'),
+                'canDeleteSemester' => $request->user()->hasAnyPermission('semesters.delete|classes.manage'),
+                'canAddClass' => $request->user()->hasAnyPermission('classes.add|classes.manage'),
+                'canEditClass' => $request->user()->hasAnyPermission('classes.edit|classes.manage'),
+                'canDeleteClass' => $request->user()->hasAnyPermission('classes.delete|classes.manage'),
+            ],
         ]);
     }
 
     public function storeAcademicYear(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('academic-years.add|classes.manage'), 403);
 
         $data = $this->academicYearData($request);
 
@@ -68,7 +79,7 @@ class AcademicSettingsController extends Controller
 
     public function updateAcademicYear(Request $request, AcademicYear $academicYear): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('academic-years.edit|classes.manage'), 403);
 
         $data = $this->academicYearData($request, $academicYear);
 
@@ -87,7 +98,7 @@ class AcademicSettingsController extends Controller
 
     public function destroyAcademicYear(Request $request, AcademicYear $academicYear): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('academic-years.delete|classes.manage'), 403);
 
         $academicYear->forceFill(['deleted_by' => $request->user()->id])->save();
         $academicYear->delete();
@@ -97,7 +108,7 @@ class AcademicSettingsController extends Controller
 
     public function storeSemester(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('semesters.add|classes.manage'), 403);
 
         $data = $this->semesterData($request);
 
@@ -119,7 +130,7 @@ class AcademicSettingsController extends Controller
 
     public function updateSemester(Request $request, Semester $semester): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('semesters.edit|classes.manage'), 403);
 
         $data = $this->semesterData($request, $semester);
 
@@ -139,7 +150,7 @@ class AcademicSettingsController extends Controller
 
     public function destroySemester(Request $request, Semester $semester): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('semesters.delete|classes.manage'), 403);
 
         $semester->forceFill(['deleted_by' => $request->user()->id])->save();
         $semester->delete();
@@ -149,7 +160,7 @@ class AcademicSettingsController extends Controller
 
     public function storeClass(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('classes.add|classes.manage'), 403);
 
         CollegeClass::create($this->classData($request) + [
             'created_by' => $request->user()->id,
@@ -161,7 +172,7 @@ class AcademicSettingsController extends Controller
 
     public function updateClass(Request $request, CollegeClass $class): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('classes.edit|classes.manage'), 403);
 
         $class->update($this->classData($request, $class) + ['updated_by' => $request->user()->id]);
 
@@ -170,7 +181,7 @@ class AcademicSettingsController extends Controller
 
     public function destroyClass(Request $request, CollegeClass $class): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('classes.delete|classes.manage'), 403);
 
         $class->forceFill(['deleted_by' => $request->user()->id])->save();
         $class->delete();

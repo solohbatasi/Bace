@@ -20,7 +20,7 @@ class CourseManagementController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('courses.view|classes.manage'), 403);
 
         $filters = $request->only(['search', 'department_id']);
 
@@ -46,12 +46,20 @@ class CourseManagementController extends Controller
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
             'semesters' => Semester::orderByDesc('starts_on')->get(['id', 'name', 'academic_year_id']),
             'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
+            'permissions' => [
+                'canAddCourse' => $request->user()->hasAnyPermission('courses.add|classes.manage'),
+                'canEditCourse' => $request->user()->hasAnyPermission('courses.edit|classes.manage'),
+                'canDeleteCourse' => $request->user()->hasAnyPermission('courses.delete|classes.manage'),
+                'canAddUnit' => $request->user()->hasAnyPermission('units.add|classes.manage'),
+                'canEditUnit' => $request->user()->hasAnyPermission('units.edit|classes.manage'),
+                'canAssignLecturer' => $request->user()->hasAnyPermission('units.manage|lecturers.manage|classes.manage'),
+            ],
         ]);
     }
 
     public function storeCourse(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('courses.add|classes.manage'), 403);
 
         Course::create($this->courseData($request) + [
             'created_by' => $request->user()->id,
@@ -63,7 +71,7 @@ class CourseManagementController extends Controller
 
     public function updateCourse(Request $request, Course $course): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('courses.edit|classes.manage'), 403);
 
         $course->update($this->courseData($request, $course) + ['updated_by' => $request->user()->id]);
 
@@ -72,7 +80,7 @@ class CourseManagementController extends Controller
 
     public function destroyCourse(Request $request, Course $course): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('courses.delete|classes.manage'), 403);
 
         $course->forceFill(['deleted_by' => $request->user()->id])->save();
         $course->delete();
@@ -82,7 +90,7 @@ class CourseManagementController extends Controller
 
     public function storeUnit(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('units.add|classes.manage'), 403);
 
         Unit::create($this->unitData($request) + [
             'created_by' => $request->user()->id,
@@ -94,7 +102,7 @@ class CourseManagementController extends Controller
 
     public function updateUnit(Request $request, Unit $unit): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('units.edit|classes.manage'), 403);
 
         $unit->update($this->unitData($request, $unit) + ['updated_by' => $request->user()->id]);
 
@@ -103,7 +111,7 @@ class CourseManagementController extends Controller
 
     public function assignLecturer(Request $request, Unit $unit): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('units.manage|lecturers.manage|classes.manage'), 403);
 
         $data = $request->validate([
             'lecturer_id' => ['required', 'exists:lecturers,id'],

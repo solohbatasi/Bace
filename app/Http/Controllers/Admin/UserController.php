@@ -16,6 +16,8 @@ class UserController extends Controller
 {
     public function index(Request $request): Response
     {
+        abort_unless($request->user()->hasAnyPermission('users.view'), 403);
+
         $filters = $request->only(['search', 'status', 'role']);
 
         $users = User::query()
@@ -35,11 +37,17 @@ class UserController extends Controller
             'roles' => Role::orderBy('name')->get(['id', 'name']),
             'permissions' => Permission::orderBy('name')->get(['id', 'name', 'group']),
             'filters' => $filters,
+            'canAdd' => $request->user()->hasAnyPermission('users.add|users.create'),
+            'canEdit' => $request->user()->hasAnyPermission('users.edit|users.update'),
+            'canDelete' => $request->user()->hasAnyPermission('users.delete'),
+            'canManage' => $request->user()->hasAnyPermission('users.manage|users.suspend'),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('users.add|users.create'), 403);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')],
@@ -59,6 +67,8 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('users.edit|users.update'), 403);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user)],
@@ -87,8 +97,10 @@ class UserController extends Controller
         return back()->with('flash.banner', 'User updated.');
     }
 
-    public function destroy(User $user): RedirectResponse
+    public function destroy(Request $request, User $user): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('users.delete'), 403);
+
         $user->delete();
 
         return back()->with('flash.banner', 'User deleted.');
@@ -96,6 +108,8 @@ class UserController extends Controller
 
     public function suspend(Request $request, User $user): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('users.manage|users.suspend'), 403);
+
         $validated = $request->validate([
             'status_reason' => ['nullable', 'string', 'max:1000'],
             'suspended_until' => ['nullable', 'date'],
@@ -111,8 +125,10 @@ class UserController extends Controller
         return back()->with('flash.banner', 'User suspended.');
     }
 
-    public function activate(User $user): RedirectResponse
+    public function activate(Request $request, User $user): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('users.manage|users.suspend'), 403);
+
         $user->forceFill([
             'status' => 'active',
             'status_reason' => null,
@@ -125,6 +141,8 @@ class UserController extends Controller
 
     public function terminate(Request $request, User $user): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('users.manage|users.suspend'), 403);
+
         $validated = $request->validate([
             'status_reason' => ['nullable', 'string', 'max:1000'],
         ]);

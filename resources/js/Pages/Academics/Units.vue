@@ -6,7 +6,7 @@ import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
-const props = defineProps({ units: Object, courses: Array, departments: Array, filters: Object });
+const props = defineProps({ units: Object, courses: Array, departments: Array, filters: Object, permissions: Object });
 
 const showingModal = ref(false);
 const deletingUnit = ref(null);
@@ -136,7 +136,7 @@ const confirmDeleteUnit = () => {
         </div>
 
         <div class="mt-4 flex flex-col justify-between gap-3 xl:flex-row">
-            <button class="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal">
+            <button v-if="permissions?.canAdd" class="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal">
                 <span class="text-base leading-none">+</span>
                 Add Unit
             </button>
@@ -181,8 +181,8 @@ const confirmDeleteUnit = () => {
                             </div>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(unit)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyUnit(unit)">Delete</button>
+                            <button v-if="permissions?.canEdit" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(unit)">Edit</button>
+                            <button v-if="permissions?.canDelete" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyUnit(unit)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -190,7 +190,7 @@ const confirmDeleteUnit = () => {
             <div v-else class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No units found</p>
                 <p class="mt-1 text-sm text-gray-500">Create a unit or adjust your filters.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ Add Unit</button>
+                <button v-if="permissions?.canAdd" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ Add Unit</button>
             </div>
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]"><Pagination :links="units.links" /></div>
         </div>

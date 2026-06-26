@@ -18,6 +18,9 @@ const props = defineProps({
     departments: Array,
     academicYears: Array,
     semesters: Array,
+    canAdd: Boolean,
+    canEdit: Boolean,
+    canDelete: Boolean,
 });
 
 const filter = reactive({
@@ -597,6 +600,7 @@ const exportCsv = () => {
                     Export CSV
                 </button>
                 <button
+                    v-if="canAdd"
                     class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400"
                     type="button"
                     @click="openEnrollmentModal"
@@ -722,6 +726,7 @@ const exportCsv = () => {
                         </td>
                         <td class="px-5 py-4 text-right">
                             <button
+                                v-if="canEdit"
                                 class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300"
                                 type="button"
                                 @click="editStudent(student)"
@@ -729,6 +734,7 @@ const exportCsv = () => {
                                 Edit
                             </button>
                             <button
+                                v-if="canDelete"
                                 class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400"
                                 type="button"
                                 @click="destroyStudent(student)"
@@ -749,6 +755,7 @@ const exportCsv = () => {
                 <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No students found</p>
                 <p class="mt-1 max-w-sm text-sm text-gray-500">Enroll a student or adjust the filters to see records.</p>
                 <button
+                    v-if="canAdd"
                     class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400"
                     type="button"
                     @click="openEnrollmentModal"

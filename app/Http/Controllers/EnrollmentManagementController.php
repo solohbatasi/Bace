@@ -20,16 +20,22 @@ class EnrollmentManagementController extends Controller
     public function index(Request $request): Response
     {
         $student = $request->user()->student;
-        $canManage = $request->user()->hasPermission('classes.manage');
+        $canManage = $request->user()->hasAnyPermission('enrollments.manage|classes.manage');
+        $canView = $request->user()->hasAnyPermission('enrollments.view|classes.manage');
 
-        abort_unless($canManage || $student, 403);
+        abort_unless($canView || $canManage || $student, 403);
 
         return Inertia::render('Academics/Enrollments', [
             'canManage' => $canManage,
+            'permissions' => [
+                'canAdd' => $request->user()->hasAnyPermission('enrollments.add|classes.manage'),
+                'canEdit' => $request->user()->hasAnyPermission('enrollments.edit|enrollments.manage|classes.manage'),
+                'canDelete' => $request->user()->hasAnyPermission('enrollments.delete|enrollments.manage|classes.manage'),
+            ],
             'student' => $student?->load(['course:id,name,code', 'class:id,name,code']),
             'registrations' => SemesterRegistration::query()
                 ->with(['student:id,admission_number,first_name,last_name', 'course:id,code,name,has_units', 'class:id,name,code,course_id', 'semester:id,name', 'academicYear:id,name', 'enrollments.unit:id,code,name,credit_hours'])
-                ->when(! $canManage, fn ($query) => $query->where('student_id', $student->id))
+                ->when(! $canView && ! $canManage, fn ($query) => $query->where('student_id', $student->id))
                 ->latest('registered_at')
                 ->paginate(10),
             'currentYear' => AcademicYear::where('is_current', true)->first(),
@@ -91,7 +97,7 @@ class EnrollmentManagementController extends Controller
 
     public function approve(Request $request, SemesterRegistration $registration): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('enrollments.edit|enrollments.manage|classes.manage'), 403);
 
         $registration->update([
             'status' => 'approved',
@@ -106,7 +112,7 @@ class EnrollmentManagementController extends Controller
 
     public function drop(Request $request, SemesterRegistration $registration): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('enrollments.delete|enrollments.manage|classes.manage'), 403);
 
         $registration->update(['status' => 'dropped', 'notes' => $request->input('notes'), 'updated_by' => $request->user()->id]);
         $registration->enrollments()->update(['status' => 'dropped', 'updated_by' => $request->user()->id]);
@@ -116,7 +122,7 @@ class EnrollmentManagementController extends Controller
 
     public function transfer(Request $request, SemesterRegistration $registration): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('enrollments.edit|enrollments.manage|classes.manage'), 403);
 
         $data = $request->validate([
             'class_id' => ['required', 'exists:classes,id'],
@@ -163,7 +169,7 @@ class EnrollmentManagementController extends Controller
 
     public function score(Request $request, SemesterRegistration $registration): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('enrollments.edit|enrollments.manage|classes.manage'), 403);
 
         $data = $request->validate([
             'course_score' => ['nullable', 'numeric', 'min:0', 'max:100'],

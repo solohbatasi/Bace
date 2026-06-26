@@ -66,6 +66,9 @@ class StudentController extends Controller
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id', 'department_id', 'academic_year_id']),
             'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
             'semesters' => Semester::orderByDesc('starts_on')->get(['id', 'academic_year_id', 'name', 'sequence', 'is_current']),
+            'canAdd' => $request->user()->hasAnyPermission('students.add|students.create'),
+            'canEdit' => $request->user()->hasAnyPermission('students.edit|students.update'),
+            'canDelete' => $request->user()->hasAnyPermission('students.delete'),
         ]);
     }
 
@@ -107,6 +110,8 @@ class StudentController extends Controller
      */
     public function enroll(Request $request): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('students.add|students.create'), 403);
+
         try {
             // Get all request data
             $data = $request->all();

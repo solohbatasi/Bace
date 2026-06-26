@@ -15,6 +15,7 @@ const props = defineProps({
     classes: Array,
     semesters: Array,
     academicYears: Array,
+    permissions: Object,
 });
 
 const filter = reactive({ search: props.filters.search || '', department_id: props.filters.department_id || '' });
@@ -234,15 +235,15 @@ const exportCsv = () => {
                     </svg>
                     Export CSV
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCourseModal">
+                <button v-if="permissions?.canAddCourse" class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCourseModal">
                     <span class="text-base leading-none">+</span>
                     Add Course
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-blue-500/40 px-3 text-xs font-semibold text-blue-600 transition hover:border-blue-500 hover:bg-blue-500/10 dark:text-blue-300" type="button" @click="openUnitModal">
+                <button v-if="permissions?.canAddUnit" class="inline-flex h-8 items-center gap-2 rounded-md border border-blue-500/40 px-3 text-xs font-semibold text-blue-600 transition hover:border-blue-500 hover:bg-blue-500/10 dark:text-blue-300" type="button" @click="openUnitModal">
                     <span class="text-base leading-none">+</span>
                     Add Unit
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-600 transition hover:border-emerald-500 hover:bg-emerald-500/10 dark:text-emerald-300" type="button" @click="openLecturerModal">
+                <button v-if="permissions?.canAssignLecturer" class="inline-flex h-8 items-center gap-2 rounded-md border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-600 transition hover:border-emerald-500 hover:bg-emerald-500/10 dark:text-emerald-300" type="button" @click="openLecturerModal">
                     <span class="text-base leading-none">+</span>
                     Add Lecturer
                 </button>
@@ -298,8 +299,8 @@ const exportCsv = () => {
                             </div>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editCourse(course)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyCourse(course)">Delete</button>
+                            <button v-if="permissions?.canEditCourse" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editCourse(course)">Edit</button>
+                            <button v-if="permissions?.canDeleteCourse" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyCourse(course)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -313,7 +314,7 @@ const exportCsv = () => {
                 </div>
                 <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No courses found</p>
                 <p class="mt-1 max-w-sm text-sm text-gray-500">Create a course or adjust the filters to see academic records.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCourseModal">+ Add Course</button>
+                <button v-if="permissions?.canAddCourse" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCourseModal">+ Add Course</button>
             </div>
 
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]">

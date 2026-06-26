@@ -19,12 +19,12 @@ class StudentPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasPermission('students.create');
+        return $user->hasAnyPermission('students.add|students.create');
     }
 
     public function update(User $user, Student $student): bool
     {
-        return $user->hasPermission('students.update');
+        return $user->hasAnyPermission('students.edit|students.update');
     }
 
     public function delete(User $user, Student $student): bool

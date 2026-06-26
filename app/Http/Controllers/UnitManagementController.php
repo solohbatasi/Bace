@@ -14,7 +14,7 @@ class UnitManagementController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('units.view|classes.manage'), 403);
 
         $filters = $request->only(['search', 'course_id', 'department_id']);
 
@@ -37,12 +37,17 @@ class UnitManagementController extends Controller
                 ->get(['id', 'code', 'name', 'department_id', 'has_units']),
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'filters' => $filters,
+            'permissions' => [
+                'canAdd' => $request->user()->hasAnyPermission('units.add|classes.manage'),
+                'canEdit' => $request->user()->hasAnyPermission('units.edit|classes.manage'),
+                'canDelete' => $request->user()->hasAnyPermission('units.delete|classes.manage'),
+            ],
         ]);
     }
 
     public function destroy(Request $request, Unit $unit): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('units.delete|classes.manage'), 403);
 
         $unit->forceFill(['deleted_by' => $request->user()->id])->save();
         $unit->delete();

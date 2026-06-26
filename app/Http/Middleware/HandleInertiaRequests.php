@@ -38,6 +38,18 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
+            'auth' => [
+                'user' => fn () => $request->user(),
+                'permissions' => fn () => $request->user()
+                    ? $request->user()
+                        ->loadMissing(['permissions:id,name', 'roles.permissions:id,name'])
+                        ->permissions
+                        ->pluck('name')
+                        ->merge($request->user()->roles->flatMap->permissions->pluck('name'))
+                        ->unique()
+                        ->values()
+                    : [],
+            ],
             'organisation' => fn () => optional(OrganisationSetting::query()->first())->only([
                 'name',
                 'short_name',

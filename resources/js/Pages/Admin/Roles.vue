@@ -5,7 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
-const props = defineProps({ roles: Object, permissions: Array, filters: Object });
+const props = defineProps({ roles: Object, permissions: Array, filters: Object, permissionsMeta: Object });
 
 const showingModal = ref(false);
 const filter = reactive({ search: props.filters.search || '' });
@@ -21,10 +21,14 @@ const resetForm = () => {
     form.permission_ids = [];
 };
 const openCreateModal = () => {
+    if (!props.permissionsMeta?.canAdd) return;
+
     resetForm();
     showingModal.value = true;
 };
 const edit = (role) => {
+    if (!props.permissionsMeta?.canEdit) return;
+
     resetForm();
     form.id = role.id;
     form.name = role.name;
@@ -37,6 +41,9 @@ const closeModal = () => {
     resetForm();
 };
 const save = () => {
+    if (form.id && !props.permissionsMeta?.canEdit) return;
+    if (!form.id && !props.permissionsMeta?.canAdd) return;
+
     const options = { preserveScroll: true, onSuccess: closeModal };
     form.id ? form.put(route('admin.roles.update', form.id), options) : form.post(route('admin.roles.store'), options);
 };
@@ -48,7 +55,7 @@ const destroyRole = (role) => {
 <template>
     <AppLayout title="Roles">
         <template #actions>
-            <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" @click="openCreateModal">
+            <button v-if="permissionsMeta?.canAdd" class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" @click="openCreateModal">
                 <span class="text-base leading-none">+</span>
                 New Role
             </button>
@@ -72,8 +79,8 @@ const destroyRole = (role) => {
                         <td class="px-5 py-4 text-xs text-gray-600 dark:text-gray-400">{{ role.permissions.map((permission) => permission.name).join(', ') || 'No permissions' }}</td>
                         <td class="px-5 py-4 text-gray-700 dark:text-gray-300">{{ role.users_count }}</td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(role)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyRole(role)">Delete</button>
+                            <button v-if="permissionsMeta?.canEdit" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(role)">Edit</button>
+                            <button v-if="permissionsMeta?.canDelete" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyRole(role)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -81,7 +88,7 @@ const destroyRole = (role) => {
             <div v-else class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No roles yet</p>
                 <p class="mt-1 text-sm text-gray-500">Create your first role and attach permissions.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New Role</button>
+                <button v-if="permissionsMeta?.canAdd" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New Role</button>
             </div>
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]"><Pagination :links="roles.links" /></div>
         </div>
@@ -113,7 +120,7 @@ const destroyRole = (role) => {
             </template>
             <template #footer>
                 <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeModal">Cancel</button>
-                <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-50" form="role-form" type="submit" :disabled="form.processing">Save role</button>
+                <button v-if="form.id ? permissionsMeta?.canEdit : permissionsMeta?.canAdd" class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-50" form="role-form" type="submit" :disabled="form.processing">Save role</button>
             </template>
         </DialogModal>
     </AppLayout>

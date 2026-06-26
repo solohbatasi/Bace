@@ -13,17 +13,20 @@ class OrganisationSettingsController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('organisation-settings.view|classes.manage'), 403);
 
         return Inertia::render('Admin/OrganisationSettings', [
             'setting' => OrganisationSetting::current(),
             'defaultOperationHours' => OrganisationSetting::defaultOperationHours(),
+            'permissions' => [
+                'canEdit' => $request->user()->hasAnyPermission('organisation-settings.edit|classes.manage'),
+            ],
         ]);
     }
 
     public function update(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('organisation-settings.edit|classes.manage'), 403);
 
         $setting = OrganisationSetting::current();
         $data = $this->settingData($request);

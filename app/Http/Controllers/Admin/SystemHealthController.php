@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,8 +15,10 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class SystemHealthController extends Controller
 {
-    public function __invoke(): Response
+    public function __invoke(Request $request): Response
     {
+        abort_unless($request->user()->hasAnyPermission('system-health.view|health.view'), 403);
+
         $sessions = DB::table('sessions')
             ->leftJoin('users', 'sessions.user_id', '=', 'users.id')
             ->select('sessions.id', 'sessions.user_id', 'sessions.ip_address', 'sessions.user_agent', 'sessions.last_activity', 'users.name', 'users.email')
@@ -62,18 +65,26 @@ class SystemHealthController extends Controller
                     'last_used_at' => $token->last_used_at?->toDateTimeString(),
                     'expires_at' => $token->expires_at?->toDateTimeString(),
                 ]),
+            'permissions' => [
+                'canDeleteSessions' => $request->user()->hasAnyPermission('system-health.delete|tokens.revoke'),
+                'canDeleteTokens' => $request->user()->hasAnyPermission('api-tokens.delete|tokens.revoke'),
+            ],
         ]);
     }
 
-    public function destroySession(string $session): RedirectResponse
+    public function destroySession(Request $request, string $session): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('system-health.delete|tokens.revoke'), 403);
+
         DB::table('sessions')->where('id', $session)->delete();
 
         return back()->with('flash.banner', 'Session revoked.');
     }
 
-    public function destroyToken(PersonalAccessToken $token): RedirectResponse
+    public function destroyToken(Request $request, PersonalAccessToken $token): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('api-tokens.delete|tokens.revoke'), 403);
+
         $token->delete();
 
         return back()->with('flash.banner', 'API token revoked.');

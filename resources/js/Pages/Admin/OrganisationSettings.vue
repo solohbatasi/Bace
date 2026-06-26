@@ -6,6 +6,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 const props = defineProps({
     setting: Object,
     defaultOperationHours: Array,
+    permissions: Object,
 });
 
 const logoInput = ref(null);
@@ -61,6 +62,8 @@ const removeSelectedLogo = () => {
 };
 
 const save = () => {
+    if (!props.permissions?.canEdit) return;
+
     form
         .transform((data) => ({
             ...data,
@@ -90,7 +93,7 @@ const save = () => {
                             <p class="mt-2 max-w-2xl text-sm text-gray-500">{{ form.about || 'No short about has been added yet.' }}</p>
                         </div>
                     </div>
-                    <button class="inline-flex h-8 w-fit items-center rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
+                    <button v-if="permissions?.canEdit" class="inline-flex h-8 w-fit items-center rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
                         {{ form.processing ? 'Updating...' : 'Update Identity' }}
                     </button>
                 </div>
@@ -108,8 +111,8 @@ const save = () => {
                     </div>
                     <div class="md:col-span-2">
                         <input ref="logoInput" type="file" accept="image/*" class="hidden" @change="handleLogo">
-                        <button class="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="selectLogo">Upload logo</button>
-                        <button v-if="logoPreview" class="ml-2 text-xs text-red-400 hover:text-red-300" type="button" @click="removeSelectedLogo">Remove selected logo</button>
+                        <button v-if="permissions?.canEdit" class="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="selectLogo">Upload logo</button>
+                        <button v-if="permissions?.canEdit && logoPreview" class="ml-2 text-xs text-red-400 hover:text-red-300" type="button" @click="removeSelectedLogo">Remove selected logo</button>
                         <p v-if="form.errors.logo" class="mt-1 text-xs text-red-400">{{ form.errors.logo }}</p>
                     </div>
                 </div>
@@ -118,7 +121,7 @@ const save = () => {
             <section class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
                 <div class="flex items-center justify-between gap-3">
                     <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Contact Information</h2>
-                    <button class="h-8 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
+                    <button v-if="permissions?.canEdit" class="h-8 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
                         {{ form.processing ? 'Updating...' : 'Update Contact' }}
                     </button>
                 </div>
@@ -156,7 +159,7 @@ const save = () => {
             <section class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
                 <div class="flex items-center justify-between gap-3">
                     <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Profile</h2>
-                    <button class="h-8 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
+                    <button v-if="permissions?.canEdit" class="h-8 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
                         {{ form.processing ? 'Updating...' : 'Update Profile' }}
                     </button>
                 </div>
@@ -183,7 +186,7 @@ const save = () => {
             <section class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
                 <div class="flex items-center justify-between gap-3">
                     <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Days And Hours</h2>
-                    <button class="h-8 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
+                    <button v-if="permissions?.canEdit" class="h-8 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="form.processing">
                         {{ form.processing ? 'Updating...' : 'Update Hours' }}
                     </button>
                 </div>

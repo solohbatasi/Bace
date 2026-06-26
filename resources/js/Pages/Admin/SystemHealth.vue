@@ -2,7 +2,7 @@
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
-defineProps({ metrics: Object, security: Array, sessions: Array, tokens: Array });
+defineProps({ metrics: Object, security: Array, sessions: Array, tokens: Array, permissions: Object });
 
 const revokeSession = (session) => {
     if (confirm('Revoke this browser session?')) router.delete(route('admin.system-health.sessions.destroy', session.id), { preserveScroll: true });
@@ -53,7 +53,7 @@ const revokeToken = (token) => {
                         <tr v-for="session in sessions" :key="session.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
                             <td class="px-5 py-4"><p class="font-medium text-gray-900 dark:text-white">{{ session.user }}</p><p class="text-xs text-gray-500">{{ session.ip_address }} - {{ session.last_activity }}</p></td>
                             <td class="px-5 py-4 text-xs text-gray-500">{{ session.user_agent }}</td>
-                            <td class="px-5 py-4 text-right"><button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="revokeSession(session)">Revoke</button></td>
+                            <td class="px-5 py-4 text-right"><button v-if="permissions?.canDeleteSessions" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="revokeSession(session)">Revoke</button></td>
                         </tr>
                     </tbody>
                 </table>
@@ -72,7 +72,7 @@ const revokeToken = (token) => {
                         <tr v-for="token in tokens" :key="token.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
                             <td class="px-5 py-4"><p class="font-medium text-gray-900 dark:text-white">{{ token.name }}</p><p class="text-xs text-gray-500">{{ token.owner }} - Last used {{ token.last_used_at || 'never' }}</p></td>
                             <td class="px-5 py-4 text-xs text-gray-500">{{ token.abilities?.join(', ') || 'All abilities' }}</td>
-                            <td class="px-5 py-4 text-right"><button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="revokeToken(token)">Revoke</button></td>
+                            <td class="px-5 py-4 text-right"><button v-if="permissions?.canDeleteTokens" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="revokeToken(token)">Revoke</button></td>
                         </tr>
                     </tbody>
                 </table>

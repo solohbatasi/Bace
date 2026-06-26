@@ -20,12 +20,18 @@ class AssignmentManagementController extends Controller
     {
         $lecturer = $request->user()->lecturer;
         $student = $request->user()->student;
-        $canManage = $request->user()->hasPermission('assignments.manage');
+        $canManage = $request->user()->hasAnyPermission('assignments.manage');
+        $canView = $request->user()->hasAnyPermission('assignments.view|assignments.manage');
 
-        abort_unless($canManage || $student, 403);
+        abort_unless($canView || $canManage || $student, 403);
 
         return Inertia::render('Academics/Assignments', [
             'canManage' => $canManage,
+            'permissions' => [
+                'canAdd' => $request->user()->hasAnyPermission('assignments.add|assignments.manage'),
+                'canEdit' => $request->user()->hasAnyPermission('assignments.edit|assignments.manage'),
+                'canDelete' => $request->user()->hasAnyPermission('assignments.delete|assignments.manage'),
+            ],
             'assignments' => Assignment::query()
                 ->with([
                     'attachments',
@@ -54,7 +60,7 @@ class AssignmentManagementController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('assignments.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('assignments.add|assignments.manage'), 403);
 
         $data = $this->assignmentData($request);
 
@@ -76,7 +82,7 @@ class AssignmentManagementController extends Controller
 
     public function update(Request $request, Assignment $assignment): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('assignments.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('assignments.edit|assignments.manage'), 403);
 
         $data = $this->assignmentData($request);
 
@@ -93,7 +99,7 @@ class AssignmentManagementController extends Controller
 
     public function publish(Request $request, Assignment $assignment): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('assignments.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('assignments.manage'), 403);
 
         $assignment->update(['status' => 'published', 'updated_by' => $request->user()->id]);
 
