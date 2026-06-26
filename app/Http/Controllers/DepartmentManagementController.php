@@ -14,7 +14,7 @@ class DepartmentManagementController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('departments.view|classes.manage'), 403);
 
         $search = $request->string('search')->toString();
 
@@ -31,12 +31,17 @@ class DepartmentManagementController extends Controller
             'departmentOptions' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'lecturerOptions' => Lecturer::orderBy('last_name')->get(['id', 'title', 'first_name', 'last_name']),
             'filters' => ['search' => $search],
+            'permissions' => [
+                'canAdd' => $request->user()->hasAnyPermission('departments.add|classes.manage'),
+                'canEdit' => $request->user()->hasAnyPermission('departments.edit|classes.manage'),
+                'canDelete' => $request->user()->hasAnyPermission('departments.delete|classes.manage'),
+            ],
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('departments.add|classes.manage'), 403);
 
         Department::create($this->departmentData($request) + [
             'created_by' => $request->user()->id,
@@ -48,7 +53,7 @@ class DepartmentManagementController extends Controller
 
     public function update(Request $request, Department $department): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('departments.edit|classes.manage'), 403);
 
         $department->update($this->departmentData($request, $department) + ['updated_by' => $request->user()->id]);
 
@@ -57,7 +62,7 @@ class DepartmentManagementController extends Controller
 
     public function destroy(Request $request, Department $department): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('departments.delete|classes.manage'), 403);
 
         $department->forceFill(['deleted_by' => $request->user()->id])->save();
         $department->delete();

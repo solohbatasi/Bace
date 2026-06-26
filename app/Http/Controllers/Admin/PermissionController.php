@@ -14,6 +14,8 @@ class PermissionController extends Controller
 {
     public function index(Request $request): Response
     {
+        abort_unless($request->user()->hasAnyPermission('permissions.view|permissions.manage'), 403);
+
         $filters = $request->only(['search', 'group']);
 
         return Inertia::render('Admin/Permissions', [
@@ -26,11 +28,18 @@ class PermissionController extends Controller
                 ->withQueryString(),
             'groups' => Permission::query()->whereNotNull('group')->distinct()->orderBy('group')->pluck('group'),
             'filters' => $filters,
+            'permissionsMeta' => [
+                'canAdd' => $request->user()->hasAnyPermission('permissions.add|permissions.manage'),
+                'canEdit' => $request->user()->hasAnyPermission('permissions.edit|permissions.manage'),
+                'canDelete' => $request->user()->hasAnyPermission('permissions.delete|permissions.manage'),
+            ],
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('permissions.add|permissions.manage'), 403);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('permissions')],
             'group' => ['nullable', 'string', 'max:255'],
@@ -44,6 +53,8 @@ class PermissionController extends Controller
 
     public function update(Request $request, Permission $permission): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('permissions.edit|permissions.manage'), 403);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('permissions')->ignore($permission)],
             'group' => ['nullable', 'string', 'max:255'],
@@ -55,8 +66,10 @@ class PermissionController extends Controller
         return back()->with('flash.banner', 'Permission updated.');
     }
 
-    public function destroy(Permission $permission): RedirectResponse
+    public function destroy(Request $request, Permission $permission): RedirectResponse
     {
+        abort_unless($request->user()->hasAnyPermission('permissions.delete|permissions.manage'), 403);
+
         $permission->delete();
 
         return back()->with('flash.banner', 'Permission deleted.');

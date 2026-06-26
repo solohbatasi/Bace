@@ -64,8 +64,11 @@ return new class extends Migration
             $table->string('code', 30);
             $table->string('name');
             $table->string('qualification_level', 80)->nullable();
-            $table->unsignedSmallInteger('duration_semesters');
+            $table->string('duration_type', 30)->default('semesters');
+            $table->unsignedSmallInteger('duration_semesters')->nullable();
+            $table->string('duration', 80)->nullable();
             $table->decimal('fees', 12, 2)->default(0);
+            $table->boolean('has_units')->default(true);
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
             $this->auditColumns($table);
@@ -181,6 +184,7 @@ return new class extends Migration
             $table->foreignId('department_id')->constrained()->restrictOnDelete();
             $table->string('code', 30);
             $table->string('name');
+            $table->string('duration', 80)->nullable();
             $table->unsignedTinyInteger('credit_hours')->default(3);
             $table->unsignedSmallInteger('year_level');
             $table->unsignedSmallInteger('semester_sequence');
@@ -215,6 +219,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('semester_registration_id')->nullable();
             $table->foreignId('student_id')->constrained()->restrictOnDelete();
+            $table->foreignId('course_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('unit_id')->constrained()->restrictOnDelete();
             $table->foreignId('class_id')->constrained()->restrictOnDelete();
             $table->foreignId('semester_id')->constrained()->restrictOnDelete();
@@ -228,6 +233,7 @@ return new class extends Migration
             $table->timestampsTz();
 
             $table->index(['student_id', 'academic_year_id', 'semester_id']);
+            $table->index(['student_id', 'course_id', 'academic_year_id', 'semester_id'], 'enrollments_student_course_term_index');
             $table->index(['unit_id', 'class_id']);
             $table->index('status');
         });
@@ -236,18 +242,22 @@ return new class extends Migration
             $table->id();
             $table->foreignId('student_id')->constrained()->restrictOnDelete();
             $table->foreignId('class_id')->constrained()->restrictOnDelete();
+            $table->foreignId('course_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('semester_id')->constrained()->restrictOnDelete();
             $table->foreignId('academic_year_id')->constrained()->restrictOnDelete();
             $table->timestampTz('registered_at');
             $table->timestampTz('approved_at')->nullable();
             $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('status', 30)->default('pending');
+            $table->decimal('course_score', 5, 2)->nullable();
+            $table->string('course_grade', 20)->nullable();
             $table->text('notes')->nullable();
             $this->auditColumns($table);
             $table->softDeletesTz();
             $table->timestampsTz();
 
             $table->index(['student_id', 'academic_year_id', 'semester_id']);
+            $table->index(['student_id', 'course_id', 'academic_year_id', 'semester_id'], 'semester_reg_course_term_index');
             $table->index(['status', 'registered_at']);
         });
 
@@ -549,7 +559,7 @@ return new class extends Migration
             "CREATE UNIQUE INDEX units_course_code_active_unique ON units (course_id, lower(code)) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX lecturer_unit_assignments_active_unique ON lecturer_unit_assignments (lecturer_id, unit_id, class_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX enrollments_student_unit_term_active_unique ON enrollments (student_id, unit_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
-            "CREATE UNIQUE INDEX semester_registrations_student_term_active_unique ON semester_registrations (student_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
+            "CREATE UNIQUE INDEX semester_registrations_student_class_term_active_unique ON semester_registrations (student_id, class_id, semester_id, academic_year_id) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX assignment_submissions_student_assignment_active_unique ON assignment_submissions (assignment_id, student_id) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX assignment_submission_versions_number_active_unique ON assignment_submission_versions (assignment_submission_id, version_number) WHERE deleted_at IS NULL",
             "CREATE UNIQUE INDEX fees_structures_course_class_term_active_unique ON fees_structures (course_id, coalesce(class_id, 0), academic_year_id, coalesce(semester_id, 0)) WHERE deleted_at IS NULL",
@@ -560,6 +570,8 @@ return new class extends Migration
             "ALTER TABLE academic_years ADD CONSTRAINT academic_years_dates_check CHECK (ends_on > starts_on)",
             "ALTER TABLE semesters ADD CONSTRAINT semesters_dates_check CHECK (ends_on > starts_on)",
             "ALTER TABLE courses ADD CONSTRAINT courses_duration_check CHECK (duration_semesters > 0)",
+            "ALTER TABLE courses ADD CONSTRAINT courses_duration_type_check CHECK (duration_type IN ('semesters', 'custom'))",
+            "ALTER TABLE courses ADD CONSTRAINT courses_duration_requirement_check CHECK ((duration_type = 'semesters' AND duration_semesters IS NOT NULL AND duration_semesters > 0) OR (duration_type = 'custom' AND duration IS NOT NULL AND duration <> ''))",
             "ALTER TABLE courses ADD CONSTRAINT courses_fees_check CHECK (fees >= 0)",
             "ALTER TABLE classes ADD CONSTRAINT classes_year_level_check CHECK (year_level > 0)",
             "ALTER TABLE classes ADD CONSTRAINT classes_capacity_check CHECK (capacity IS NULL OR capacity > 0)",

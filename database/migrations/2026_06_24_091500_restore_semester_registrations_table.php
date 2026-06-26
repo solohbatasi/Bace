@@ -14,6 +14,7 @@ return new class extends Migration
                 $table->id();
                 $table->foreignId('student_id')->constrained()->restrictOnDelete();
                 $table->foreignId('class_id')->constrained()->restrictOnDelete();
+                $table->foreignId('course_id')->nullable()->constrained()->nullOnDelete();
                 $table->foreignId('semester_id')->constrained()->restrictOnDelete();
                 $table->foreignId('academic_year_id')->constrained()->restrictOnDelete();
                 $table->timestampTz('registered_at');
@@ -28,6 +29,7 @@ return new class extends Migration
                 $table->timestampsTz();
 
                 $table->index(['student_id', 'academic_year_id', 'semester_id']);
+                $table->index(['student_id', 'course_id', 'academic_year_id', 'semester_id'], 'semester_reg_course_term_index');
                 $table->index(['status', 'registered_at']);
             });
         }
@@ -38,10 +40,10 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_class
-        WHERE relname = 'semester_registrations_student_term_active_unique'
+        WHERE relname = 'semester_registrations_student_class_term_active_unique'
     ) THEN
-        CREATE UNIQUE INDEX semester_registrations_student_term_active_unique
-        ON semester_registrations (student_id, semester_id, academic_year_id)
+        CREATE UNIQUE INDEX semester_registrations_student_class_term_active_unique
+        ON semester_registrations (student_id, class_id, semester_id, academic_year_id)
         WHERE deleted_at IS NULL;
     END IF;
 END

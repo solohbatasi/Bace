@@ -35,6 +35,11 @@ class Enrollment extends Model
         return $this->belongsTo(Unit::class);
     }
 
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
+    }
+
     public function class(): BelongsTo
     {
         return $this->belongsTo(CollegeClass::class, 'class_id');

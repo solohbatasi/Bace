@@ -5,7 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
-const props = defineProps({ permissions: Object, groups: Array, filters: Object });
+const props = defineProps({ permissions: Object, groups: Array, filters: Object, permissionsMeta: Object });
 
 const showingModal = ref(false);
 const filter = reactive({ search: props.filters.search || '', group: props.filters.group || '' });
@@ -48,7 +48,7 @@ const destroyPermission = (permission) => {
 <template>
     <AppLayout title="Permissions">
         <template #actions>
-            <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" @click="openCreateModal">
+            <button v-if="permissionsMeta?.canAdd" class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" @click="openCreateModal">
                 <span class="text-base leading-none">+</span>
                 New Permission
             </button>
@@ -76,8 +76,8 @@ const destroyPermission = (permission) => {
                         <td class="px-5 py-4"><span class="rounded-md bg-blue-500/10 px-2 py-1 text-xs font-semibold text-blue-300">{{ permission.group || 'General' }}</span></td>
                         <td class="px-5 py-4 text-xs text-gray-600 dark:text-gray-400">{{ permission.roles_count }} roles, {{ permission.users_count }} users</td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(permission)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyPermission(permission)">Delete</button>
+                            <button v-if="permissionsMeta?.canEdit" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" @click="edit(permission)">Edit</button>
+                            <button v-if="permissionsMeta?.canDelete" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 hover:border-red-400" @click="destroyPermission(permission)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -85,7 +85,7 @@ const destroyPermission = (permission) => {
             <div v-else class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center">
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No permissions yet</p>
                 <p class="mt-1 text-sm text-gray-500">Create permissions to enforce access cleanly.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New Permission</button>
+                <button v-if="permissionsMeta?.canAdd" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New Permission</button>
             </div>
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]"><Pagination :links="permissions.links" /></div>
         </div>

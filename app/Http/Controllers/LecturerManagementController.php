@@ -18,7 +18,7 @@ class LecturerManagementController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('lecturers.view|classes.manage'), 403);
 
         $filters = $request->only(['search', 'department_id', 'status']);
 
@@ -38,12 +38,17 @@ class LecturerManagementController extends Controller
                 ->withQueryString(),
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'filters' => $filters,
+            'permissions' => [
+                'canAdd' => $request->user()->hasAnyPermission('lecturers.add|classes.manage'),
+                'canEdit' => $request->user()->hasAnyPermission('lecturers.edit|classes.manage'),
+                'canDelete' => $request->user()->hasAnyPermission('lecturers.delete|classes.manage'),
+            ],
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('lecturers.add|classes.manage'), 403);
 
         DB::transaction(function () use ($request): void {
             $data = $this->lecturerData($request);
@@ -61,7 +66,7 @@ class LecturerManagementController extends Controller
 
     public function update(Request $request, Lecturer $lecturer): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('lecturers.edit|classes.manage'), 403);
 
         DB::transaction(function () use ($request, $lecturer): void {
             $data = $this->lecturerData($request, $lecturer);
@@ -78,7 +83,7 @@ class LecturerManagementController extends Controller
 
     public function destroy(Request $request, Lecturer $lecturer): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('lecturers.delete|classes.manage'), 403);
 
         $lecturer->forceFill(['deleted_by' => $request->user()->id])->save();
         $lecturer->delete();

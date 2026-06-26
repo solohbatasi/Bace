@@ -15,6 +15,8 @@ class RoleController extends Controller
 {
     public function index(Request $request): Response
     {
+        abort_unless($request->user()->hasPermission('roles.view'), 403);
+
         $search = $request->string('search')->toString();
 
         return Inertia::render('Admin/Roles', [
@@ -26,11 +28,18 @@ class RoleController extends Controller
                 ->withQueryString(),
             'permissions' => Permission::orderBy('group')->orderBy('name')->get(['id', 'name', 'group']),
             'filters' => ['search' => $search],
+            'permissionsMeta' => [
+                'canAdd' => $request->user()->hasPermission('roles.add'),
+                'canEdit' => $request->user()->hasPermission('roles.edit'),
+                'canDelete' => $request->user()->hasPermission('roles.delete'),
+            ],
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        abort_unless($request->user()->hasPermission('roles.add'), 403);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('roles')],
             'description' => ['nullable', 'string', 'max:1000'],
@@ -46,6 +55,8 @@ class RoleController extends Controller
 
     public function update(Request $request, Role $role): RedirectResponse
     {
+        abort_unless($request->user()->hasPermission('roles.edit'), 403);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('roles')->ignore($role)],
             'description' => ['nullable', 'string', 'max:1000'],
@@ -59,8 +70,10 @@ class RoleController extends Controller
         return back()->with('flash.banner', 'Role updated.');
     }
 
-    public function destroy(Role $role): RedirectResponse
+    public function destroy(Request $request, Role $role): RedirectResponse
     {
+        abort_unless($request->user()->hasPermission('roles.delete'), 403);
+
         $role->delete();
 
         return back()->with('flash.banner', 'Role deleted.');

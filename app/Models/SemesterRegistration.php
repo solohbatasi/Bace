@@ -20,6 +20,8 @@ class SemesterRegistration extends Model
     protected $casts = [
         'registered_at' => 'datetime',
         'approved_at' => 'datetime',
+        'course_fee' => 'decimal:2',
+        'course_score' => 'decimal:2',
     ];
 
     public function student(): BelongsTo
@@ -30,6 +32,11 @@ class SemesterRegistration extends Model
     public function class(): BelongsTo
     {
         return $this->belongsTo(CollegeClass::class, 'class_id');
+    }
+
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
     }
 
     public function semester(): BelongsTo

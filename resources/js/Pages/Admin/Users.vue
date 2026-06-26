@@ -6,7 +6,7 @@ import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
-const props = defineProps({ users: Object, roles: Array, permissions: Array, filters: Object });
+const props = defineProps({ users: Object, roles: Array, permissions: Array, filters: Object, canAdd: Boolean, canEdit: Boolean, canDelete: Boolean, canManage: Boolean });
 
 const showingUserModal = ref(false);
 const deletingUser = ref(null);
@@ -143,7 +143,7 @@ const exportCsv = () => {
                     </svg>
                     Export CSV
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal">
+                <button v-if="canAdd" class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCreateModal">
                     <span class="text-base leading-none">+</span>
                     New User
                 </button>
@@ -196,11 +196,11 @@ const exportCsv = () => {
                         <td class="px-5 py-4 text-xs text-gray-500">{{ user.created_at }}</td>
                         <td class="px-5 py-4 text-right">
                             <div class="flex justify-end gap-2">
-                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="edit(user)">Edit</button>
-                                <button v-if="user.status === 'active'" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-amber-600 transition hover:border-amber-400 dark:border-[#2a3040] dark:text-amber-300" type="button" @click="postAction('suspend', user)">Suspend</button>
-                                <button v-if="user.status !== 'active'" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-emerald-600 transition hover:border-emerald-400 dark:border-[#2a3040] dark:text-emerald-300" type="button" @click="postAction('activate', user)">Activate</button>
-                                <button v-if="user.status === 'active'" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="postAction('terminate', user)">Terminate</button>
-                                <button class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 transition hover:border-red-400 hover:text-red-600 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-red-300" type="button" @click="destroyUser(user)">Delete</button>
+                                <button v-if="canEdit" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="edit(user)">Edit</button>
+                                <button v-if="canManage && user.status === 'active'" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-amber-600 transition hover:border-amber-400 dark:border-[#2a3040] dark:text-amber-300" type="button" @click="postAction('suspend', user)">Suspend</button>
+                                <button v-if="canManage && user.status !== 'active'" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-emerald-600 transition hover:border-emerald-400 dark:border-[#2a3040] dark:text-emerald-300" type="button" @click="postAction('activate', user)">Activate</button>
+                                <button v-if="canManage && user.status === 'active'" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="postAction('terminate', user)">Terminate</button>
+                                <button v-if="canDelete" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 transition hover:border-red-400 hover:text-red-600 dark:border-[#2a3040] dark:text-gray-400 dark:hover:text-red-300" type="button" @click="destroyUser(user)">Delete</button>
                             </div>
                         </td>
                     </tr>
@@ -215,7 +215,7 @@ const exportCsv = () => {
                 </div>
                 <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No users found</p>
                 <p class="mt-1 max-w-sm text-sm text-gray-500">Create a user or adjust your filters to see account records.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New User</button>
+                <button v-if="canAdd" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" @click="openCreateModal">+ New User</button>
             </div>
 
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]">

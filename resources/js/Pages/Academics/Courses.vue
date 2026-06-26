@@ -10,24 +10,40 @@ const props = defineProps({
     courses: Object,
     filters: Object,
     departments: Array,
+    unitCourses: Array,
     lecturers: Array,
     classes: Array,
     semesters: Array,
     academicYears: Array,
+    permissions: Object,
 });
 
 const filter = reactive({ search: props.filters.search || '', department_id: props.filters.department_id || '' });
-const courseForm = useForm({ id: null, department_id: '', code: '', name: '', qualification_level: '', duration_semesters: 1, fees: 0, description: '', is_active: true });
-const unitForm = useForm({ course_id: '', department_id: '', code: '', name: '', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
+const courseForm = useForm({ id: null, department_id: '', code: '', name: '', qualification_level: '', duration_type: 'semesters', duration_semesters: 1, duration: '', fees: 0, has_units: true, description: '', is_active: true });
+const unitForm = useForm({ course_id: '', department_id: '', code: '', name: '', duration: '', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
 const assignmentForm = useForm({ unit_id: '', lecturer_id: '', class_id: '', semester_id: '', academic_year_id: '', is_primary: true });
 const showingCourseModal = ref(false);
 const showingUnitModal = ref(false);
 const showingLecturerModal = ref(false);
 const deletingCourse = ref(null);
+const unitCourseSearch = ref('');
+const unitCourseSelectOpen = ref(false);
 
 watch(filter, () => router.get(route('academics.courses.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
 const allUnits = computed(() => props.courses.data.flatMap((course) => course.units || []));
+const unitEligibleCourses = computed(() => {
+    const search = unitCourseSearch.value.toLowerCase();
+
+    return props.unitCourses
+        .filter((course) => !unitForm.department_id || Number(course.department_id) === Number(unitForm.department_id))
+        .filter((course) => !search || [course.code, course.name].some((value) => String(value || '').toLowerCase().includes(search)));
+});
+const selectedUnitCourseLabel = computed(() => {
+    const course = props.unitCourses.find((course) => Number(course.id) === Number(unitForm.course_id));
+
+    return course ? `${course.code} - ${course.name}` : 'Select course';
+});
 const stats = computed(() => ({
     total: props.courses.total,
     active: props.courses.data.filter((course) => course.is_active).length,
@@ -42,8 +58,11 @@ const resetCourseForm = () => {
     courseForm.code = '';
     courseForm.name = '';
     courseForm.qualification_level = '';
+    courseForm.duration_type = 'semesters';
     courseForm.duration_semesters = 1;
+    courseForm.duration = '';
     courseForm.fees = 0;
+    courseForm.has_units = true;
     courseForm.description = '';
     courseForm.is_active = true;
 };
@@ -52,10 +71,13 @@ const resetUnitForm = () => {
     unitForm.clearErrors();
     unitForm.reset();
     unitForm.credit_hours = 3;
+    unitForm.duration = '';
     unitForm.year_level = 1;
     unitForm.semester_sequence = 1;
     unitForm.is_core = true;
     unitForm.is_active = true;
+    unitCourseSearch.value = '';
+    unitCourseSelectOpen.value = false;
 };
 
 const resetAssignmentForm = () => {
@@ -76,8 +98,11 @@ const editCourse = (course) => {
     courseForm.code = course.code;
     courseForm.name = course.name;
     courseForm.qualification_level = course.qualification_level || '';
-    courseForm.duration_semesters = course.duration_semesters;
+    courseForm.duration_type = course.duration_type || (course.duration ? 'custom' : 'semesters');
+    courseForm.duration_semesters = course.duration_semesters || 1;
+    courseForm.duration = course.duration || '';
     courseForm.fees = course.fees ?? 0;
+    courseForm.has_units = Boolean(course.has_units);
     courseForm.description = course.description || '';
     courseForm.is_active = Boolean(course.is_active);
     showingCourseModal.value = true;
@@ -91,6 +116,27 @@ const closeCourseModal = () => {
 const openUnitModal = () => {
     resetUnitForm();
     showingUnitModal.value = true;
+};
+
+const updateUnitDepartment = () => {
+    unitForm.course_id = '';
+    unitCourseSearch.value = '';
+    unitCourseSelectOpen.value = false;
+};
+
+const toggleUnitCourseSelect = () => {
+    if (!unitForm.department_id) return;
+
+    unitCourseSelectOpen.value = !unitCourseSelectOpen.value;
+    if (unitCourseSelectOpen.value) {
+        unitCourseSearch.value = '';
+    }
+};
+
+const selectUnitCourse = (course) => {
+    unitForm.course_id = course.id;
+    unitCourseSelectOpen.value = false;
+    unitCourseSearch.value = '';
 };
 
 const openLecturerModal = () => {
@@ -189,15 +235,15 @@ const exportCsv = () => {
                     </svg>
                     Export CSV
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCourseModal">
+                <button v-if="permissions?.canAddCourse" class="inline-flex h-8 items-center gap-2 rounded-md bg-violet-500 px-3 text-xs font-semibold text-white transition hover:bg-violet-400" type="button" @click="openCourseModal">
                     <span class="text-base leading-none">+</span>
                     Add Course
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-blue-500/40 px-3 text-xs font-semibold text-blue-600 transition hover:border-blue-500 hover:bg-blue-500/10 dark:text-blue-300" type="button" @click="openUnitModal">
+                <button v-if="permissions?.canAddUnit" class="inline-flex h-8 items-center gap-2 rounded-md border border-blue-500/40 px-3 text-xs font-semibold text-blue-600 transition hover:border-blue-500 hover:bg-blue-500/10 dark:text-blue-300" type="button" @click="openUnitModal">
                     <span class="text-base leading-none">+</span>
                     Add Unit
                 </button>
-                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-600 transition hover:border-emerald-500 hover:bg-emerald-500/10 dark:text-emerald-300" type="button" @click="openLecturerModal">
+                <button v-if="permissions?.canAssignLecturer" class="inline-flex h-8 items-center gap-2 rounded-md border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-600 transition hover:border-emerald-500 hover:bg-emerald-500/10 dark:text-emerald-300" type="button" @click="openLecturerModal">
                     <span class="text-base leading-none">+</span>
                     Add Lecturer
                 </button>
@@ -232,7 +278,9 @@ const exportCsv = () => {
                             <p class="text-xs text-gray-500">{{ course.qualification_level || 'No qualification level' }}</p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ course.department?.name || '-' }}</td>
-                        <td class="px-5 py-4 text-gray-500">{{ course.duration_semesters }} semesters</td>
+                        <td class="px-5 py-4 text-gray-500">
+                            {{ course.duration_type === 'custom' ? (course.duration || '-') : `${course.duration_semesters} semesters` }}
+                        </td>
                         <td class="px-5 py-4 font-semibold text-emerald-500">KES {{ Number(course.fees).toLocaleString() }}</td>
                         <td class="px-5 py-4">
                             <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="course.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'">
@@ -241,16 +289,18 @@ const exportCsv = () => {
                         </td>
                         <td class="px-5 py-4">
                             <div class="flex max-w-xl flex-wrap gap-2">
-                                <span v-for="unit in course.units" :key="unit.id" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 dark:border-[#2a3040] dark:text-gray-300">
+                                <span v-if="!course.has_units" class="rounded-md bg-gray-100 px-2.5 py-1.5 text-xs text-gray-500 dark:bg-[#1a1f2b]">Does not use units</span>
+                                <span v-for="unit in course.units" v-else :key="unit.id" class="rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 dark:border-[#2a3040] dark:text-gray-300">
                                     <span class="font-semibold text-gray-900 dark:text-white">{{ unit.code }}</span>
                                     {{ unit.name }}
+                                    <span v-if="unit.duration" class="text-gray-400">({{ unit.duration }})</span>
                                 </span>
-                                <span v-if="!course.units.length" class="text-xs text-gray-500">No units</span>
+                                <span v-if="course.has_units && !course.units.length" class="text-xs text-gray-500">No units</span>
                             </div>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editCourse(course)">Edit</button>
-                            <button class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyCourse(course)">Delete</button>
+                            <button v-if="permissions?.canEditCourse" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editCourse(course)">Edit</button>
+                            <button v-if="permissions?.canDeleteCourse" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyCourse(course)">Delete</button>
                         </td>
                     </tr>
                 </tbody>
@@ -264,7 +314,7 @@ const exportCsv = () => {
                 </div>
                 <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No courses found</p>
                 <p class="mt-1 max-w-sm text-sm text-gray-500">Create a course or adjust the filters to see academic records.</p>
-                <button class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCourseModal">+ Add Course</button>
+                <button v-if="permissions?.canAddCourse" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCourseModal">+ Add Course</button>
             </div>
 
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]">
@@ -300,13 +350,28 @@ const exportCsv = () => {
                         <input v-model="courseForm.qualification_level" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
                     </div>
                     <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Duration</label>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Duration tracking</label>
+                        <select v-model="courseForm.duration_type" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                            <option value="semesters">Semester duration</option>
+                            <option value="custom">Custom duration</option>
+                        </select>
+                    </div>
+                    <div v-if="courseForm.duration_type === 'semesters'">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Semesters</label>
                         <input v-model="courseForm.duration_semesters" type="number" min="1" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                    </div>
+                    <div v-else>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course duration</label>
+                        <input v-model="courseForm.duration" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="e.g. 3 months, 10 weeks" required>
                     </div>
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Fees</label>
                         <input v-model="courseForm.fees" type="number" min="0" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
                     </div>
+                    <label class="flex items-center gap-2 pt-6 text-sm">
+                        <input v-model="courseForm.has_units" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
+                        Course has units
+                    </label>
                     <label class="flex items-center gap-2 pt-6 text-sm">
                         <input v-model="courseForm.is_active" type="checkbox" class="rounded border-[#2a3040] bg-[#090c11] text-violet-500 focus:ring-violet-500">
                         Active course
@@ -332,19 +397,49 @@ const exportCsv = () => {
             <template #content>
                 <form id="unit-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="saveUnit">
                     <div>
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course</label>
-                        <select v-model="unitForm.course_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
-                            <option value="">Select course</option>
-                            <option v-for="course in courses.data" :key="course.id" :value="course.id">{{ course.code }} - {{ course.name }}</option>
-                        </select>
-                        <p v-if="unitForm.errors.course_id" class="mt-1 text-xs text-red-400">{{ unitForm.errors.course_id }}</p>
-                    </div>
-                    <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Department</label>
-                        <select v-model="unitForm.department_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                        <select v-model="unitForm.department_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required @change="updateUnitDepartment">
                             <option value="">Select department</option>
                             <option v-for="department in departments" :key="department.id" :value="department.id">{{ department.name }}</option>
                         </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course</label>
+                        <div class="relative mt-1">
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-900 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                                :disabled="!unitForm.department_id"
+                                @click="toggleUnitCourseSelect"
+                            >
+                                <span class="truncate">{{ unitForm.department_id ? selectedUnitCourseLabel : 'Select department first' }}</span>
+                                <span class="text-xs text-gray-400">▼</span>
+                            </button>
+                            <div v-if="unitCourseSelectOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                <div class="sticky top-0 border-b border-gray-200 bg-white p-2 dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                    <input
+                                        v-model="unitCourseSearch"
+                                        class="w-full rounded-md border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                                        placeholder="Search code or course"
+                                    >
+                                </div>
+                                <button
+                                    v-for="course in unitEligibleCourses"
+                                    :key="course.id"
+                                    type="button"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-[#252b3a]"
+                                    :class="Number(unitForm.course_id) === Number(course.id) ? 'bg-violet-500/10 text-violet-700 dark:text-violet-300' : 'text-gray-700 dark:text-gray-300'"
+                                    @click="selectUnitCourse(course)"
+                                >
+                                    <span class="block font-semibold">{{ course.code }}</span>
+                                    <span class="text-xs text-gray-500">{{ course.name }}</span>
+                                </button>
+                                <div v-if="!unitEligibleCourses.length" class="px-3 py-2 text-sm text-gray-500">
+                                    No unit-based courses found
+                                </div>
+                            </div>
+                        </div>
+                        <p v-if="unitForm.errors.course_id" class="mt-1 text-xs text-red-400">{{ unitForm.errors.course_id }}</p>
                     </div>
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Unit code</label>
@@ -354,6 +449,10 @@ const exportCsv = () => {
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Unit name</label>
                         <input v-model="unitForm.name" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Unit duration</label>
+                        <input v-model="unitForm.duration" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" placeholder="Optional, e.g. 6 weeks">
                     </div>
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Credit hours</label>

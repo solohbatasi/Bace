@@ -112,6 +112,13 @@ class User extends Authenticatable
             || $this->roles->flatMap->permissions->contains('name', $permission);
     }
 
+    public function hasAnyPermission(array|string $permissions): bool
+    {
+        return collect((array) $permissions)
+            ->flatMap(fn (string $permission) => explode('|', $permission))
+            ->contains(fn (string $permission) => $this->hasPermission($permission));
+    }
+
     public function isSuspended(): bool
     {
         return $this->status === 'suspended'

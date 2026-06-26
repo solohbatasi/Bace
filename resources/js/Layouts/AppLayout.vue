@@ -18,25 +18,29 @@ const page = usePage();
 const sidebarOpen = ref(localStorage.getItem('sidebar') !== 'closed');
 const organisation = computed(() => page.props.organisation || {});
 const organisationInitials = computed(() => (organisation.value.short_name || organisation.value.name || 'ORG').substring(0, 3).toUpperCase());
+const userPermissions = computed(() => page.props.auth?.permissions || []);
+const can = (permission) => permission
+    .split('|')
+    .some((item) => userPermissions.value.includes(item));
 
 const navigation = computed(() => [
     { name: 'Dashboard', route: 'dashboard', href: route('dashboard'), icon: 'dashboard' },
-    { name: 'Users', route: 'admin.users.*', href: route('admin.users.index'), icon: 'users' },
-    { name: 'Students', route: 'students.*', href: route('students.index'), icon: 'student' },
-    { name: 'Payments', route: 'finance.payments.*', href: route('finance.payments.index'), icon: 'payments' },
-    { name: 'Academic Settings', route: 'academics.settings.*', href: route('academics.settings.index'), icon: 'calendar' },
-    { name: 'Departments', route: 'academics.departments.*', href: route('academics.departments.index'), icon: 'building' },
-    { name: 'Courses', route: 'academics.courses.*', href: route('academics.courses.index'), icon: 'book' },
-    { name: 'Units', route: 'academics.units.*', href: route('academics.units.index'), icon: 'layers' },
-    { name: 'Lecturers', route: 'academics.lecturers.*', href: route('academics.lecturers.index'), icon: 'lecturer' },
-    { name: 'Enrollments', route: 'academics.enrollments.*', href: route('academics.enrollments.index'), icon: 'clipboard' },
-    { name: 'Assignments', route: 'academics.assignments.*', href: route('academics.assignments.index'), icon: 'file' },
-    { name: 'Roles', route: 'admin.roles.*', href: route('admin.roles.index'), icon: 'shield' },
-    { name: 'Permissions', route: 'admin.permissions.*', href: route('admin.permissions.index'), icon: 'key' },
-    { name: 'Organisation Settings', route: 'admin.organisation-settings.*', href: route('admin.organisation-settings.index'), icon: 'building' },
-    { name: 'System Health', route: 'admin.system-health', href: route('admin.system-health'), icon: 'activity' },
-    page.props.jetstream.hasApiFeatures ? { name: 'API Tokens', route: 'api-tokens.index', href: route('api-tokens.index'), icon: 'mobile' } : null,
-].filter(Boolean));
+    { name: 'Users', route: 'admin.users.*', href: route('admin.users.index'), icon: 'users', permission: 'users.view' },
+    { name: 'Students', route: 'students.*', href: route('students.index'), icon: 'student', permission: 'students.view' },
+    { name: 'Payments', route: 'finance.payments.*', href: route('finance.payments.index'), icon: 'payments', permission: 'payments.view|finance.view' },
+    { name: 'Academic Settings', route: 'academics.settings.*', href: route('academics.settings.index'), icon: 'calendar', permission: 'academic-settings.view|classes.manage' },
+    { name: 'Departments', route: 'academics.departments.*', href: route('academics.departments.index'), icon: 'building', permission: 'departments.view|classes.manage' },
+    { name: 'Courses', route: 'academics.courses.*', href: route('academics.courses.index'), icon: 'book', permission: 'courses.view|classes.manage' },
+    { name: 'Units', route: 'academics.units.*', href: route('academics.units.index'), icon: 'layers', permission: 'units.view|classes.manage' },
+    { name: 'Lecturers', route: 'academics.lecturers.*', href: route('academics.lecturers.index'), icon: 'lecturer', permission: 'lecturers.view|classes.manage' },
+    { name: 'Enrollments', route: 'academics.enrollments.*', href: route('academics.enrollments.index'), icon: 'clipboard', permission: 'enrollments.view|classes.manage' },
+    { name: 'Assignments', route: 'academics.assignments.*', href: route('academics.assignments.index'), icon: 'file', permission: 'assignments.view|assignments.manage' },
+    { name: 'Roles', route: 'admin.roles.*', href: route('admin.roles.index'), icon: 'shield', permission: 'roles.view' },
+    { name: 'Permissions', route: 'admin.permissions.*', href: route('admin.permissions.index'), icon: 'key', permission: 'permissions.view|permissions.manage' },
+    { name: 'Organisation Settings', route: 'admin.organisation-settings.*', href: route('admin.organisation-settings.index'), icon: 'building', permission: 'organisation-settings.view|classes.manage' },
+    { name: 'System Health', route: 'admin.system-health', href: route('admin.system-health'), icon: 'activity', permission: 'system-health.view|health.view' },
+    page.props.jetstream.hasApiFeatures ? { name: 'API Tokens', route: 'api-tokens.index', href: route('api-tokens.index'), icon: 'mobile', permission: 'api-tokens.view' } : null,
+].filter((item) => item && (!item.permission || can(item.permission))));
 
 const toggleSidebar = () => {
     sidebarOpen.value = !sidebarOpen.value;
@@ -153,7 +157,7 @@ const logout = () => router.post(route('logout'));
                                 </div>
                                 <div class="border-t border-gray-200 dark:border-gray-700" />
                                 <DropdownLink :href="route('profile.show')">Profile</DropdownLink>
-                                <DropdownLink v-if="$page.props.jetstream.hasApiFeatures" :href="route('api-tokens.index')">API Tokens</DropdownLink>
+                                <DropdownLink v-if="$page.props.jetstream.hasApiFeatures && can('api-tokens.view')" :href="route('api-tokens.index')">API Tokens</DropdownLink>
                                 <div class="border-t border-gray-200 dark:border-gray-700" />
                                 <form @submit.prevent="logout">
                                     <DropdownLink as="button">Log Out</DropdownLink>
