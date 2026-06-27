@@ -39,6 +39,11 @@ class SemesterRegistration extends Model
         return $this->belongsTo(Course::class);
     }
 
+    public function subcourse(): BelongsTo
+    {
+        return $this->belongsTo(Course::class, 'subcourse_id');
+    }
+
     public function semester(): BelongsTo
     {
         return $this->belongsTo(Semester::class);

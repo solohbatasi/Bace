@@ -26,8 +26,14 @@ class CourseManagementController extends Controller
 
         return Inertia::render('Academics/Courses', [
             'courses' => Course::query()
-                ->with(['department:id,name,code', 'scoreLevels', 'units.lecturerAssignments.lecturer:id,title,first_name,last_name'])
-                ->withCount('units')
+                ->with([
+                    'department:id,name,code',
+                    'parentCourse:id,code,name',
+                    'subcourses' => fn ($query) => $query->orderBy('name')->withCount('units'),
+                    'scoreLevels',
+                    'units.lecturerAssignments.lecturer:id,title,first_name,last_name',
+                ])
+                ->withCount(['units', 'subcourses'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%")))
@@ -37,11 +43,16 @@ class CourseManagementController extends Controller
                 ->withQueryString(),
             'filters' => $filters,
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
+            'parentCourses' => Course::query()
+                ->whereNull('parent_course_id')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'department_id', 'code', 'name']),
             'unitCourses' => Course::query()
                 ->where('has_units', true)
                 ->where('is_active', true)
                 ->orderBy('name')
-                ->get(['id', 'department_id', 'code', 'name', 'has_units']),
+                ->get(['id', 'department_id', 'parent_course_id', 'code', 'name', 'has_units']),
             'lecturers' => Lecturer::orderBy('last_name')->get(['id', 'title', 'first_name', 'last_name', 'department_id']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
             'semesters' => Semester::orderByDesc('starts_on')->get(['id', 'name', 'academic_year_id']),
@@ -144,6 +155,7 @@ class CourseManagementController extends Controller
     {
         $data = $request->validate([
             'department_id' => ['required', 'exists:departments,id'],
+            'parent_course_id' => ['nullable', 'exists:courses,id'],
             'code' => ['required', 'max:30', Rule::unique('courses')->ignore($course)->whereNull('deleted_at')],
             'name' => ['required', 'max:255'],
             'qualification_level' => ['nullable', 'max:80'],
@@ -158,6 +170,17 @@ class CourseManagementController extends Controller
         ]);
 
         $data['grading_mode'] ??= 'score_levels_with_grades';
+
+        if (($data['parent_course_id'] ?? null) && $course && (int) $data['parent_course_id'] === (int) $course->id) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'parent_course_id' => 'A course cannot be its own subcourse parent.',
+            ]);
+        }
+
+        if ($data['parent_course_id'] ?? null) {
+            $parent = Course::findOrFail($data['parent_course_id']);
+            $data['department_id'] = $parent->department_id;
+        }
 
         if ($data['duration_type'] === 'semesters') {
             $data['duration'] = null;

@@ -23,7 +23,7 @@ class ExaminationResultController extends Controller
     {
         abort_unless($request->user()->hasAnyPermission('examinations.edit|examinations.manage|classes.manage'), 403);
 
-        $filters = $request->only(['department_id', 'course_id', 'unit_id', 'examination_id', 'class_id', 'result_search', 'result_status']);
+        $filters = $request->only(['department_id', 'course_id', 'subcourse_id', 'unit_id', 'examination_id', 'class_id', 'result_search', 'result_status']);
         $selectedExamination = null;
         $entries = null;
 
@@ -31,9 +31,11 @@ class ExaminationResultController extends Controller
             $selectedExamination = Examination::with([
                 'course:id,code,name,department_id,grading_mode',
                 'course.scoreLevels',
+                'subcourse:id,parent_course_id,code,name,department_id,grading_mode',
+                'subcourse.scoreLevels',
                 'unit:id,code,name,course_id,grading_mode',
                 'unit.scoreLevels',
-                'unit.course:id,code,name,grading_mode',
+                'unit.course:id,parent_course_id,code,name,grading_mode',
                 'unit.course.scoreLevels',
                 'scoreLevels',
                 'results',
@@ -54,13 +56,15 @@ class ExaminationResultController extends Controller
         return Inertia::render('Academics/ExaminationResults', [
             'filters' => $filters,
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
-            'courses' => Course::orderBy('name')->get(['id', 'department_id', 'code', 'name', 'has_units']),
+            'courses' => Course::with(['subcourses' => fn ($query) => $query->where('is_active', true)->orderBy('name')])
+                ->orderBy('name')
+                ->get(['id', 'parent_course_id', 'department_id', 'code', 'name', 'has_units', 'is_active']),
             'units' => Unit::orderBy('code')->get(['id', 'course_id', 'department_id', 'code', 'name']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'course_id', 'department_id', 'code', 'name']),
-            'examinations' => Examination::with(['course:id,code,name,department_id', 'unit:id,code,name,course_id'])
+            'examinations' => Examination::with(['course:id,code,name,department_id', 'subcourse:id,parent_course_id,code,name,department_id', 'unit:id,code,name,course_id'])
                 ->where('is_active', true)
                 ->orderBy('name')
-                ->get(['id', 'course_id', 'unit_id', 'code', 'name', 'scope_type', 'academic_year_id', 'semester_id', 'max_score']),
+                ->get(['id', 'course_id', 'subcourse_id', 'unit_id', 'code', 'name', 'scope_type', 'academic_year_id', 'semester_id', 'max_score']),
             'selectedExamination' => $selectedExamination,
             'entries' => $entries,
         ]);
@@ -137,8 +141,14 @@ class ExaminationResultController extends Controller
 
         if ($examination->unit) {
             $sources[] = ['source' => 'unit', 'mode' => $examination->unit->grading_mode, 'levels' => $examination->unit->scoreLevels];
+            if ($examination->subcourse) {
+                $sources[] = ['source' => 'subcourse', 'mode' => $examination->subcourse->grading_mode, 'levels' => $examination->subcourse->scoreLevels];
+            }
             $sources[] = ['source' => 'course', 'mode' => $examination->unit->course?->grading_mode, 'levels' => $examination->unit->course?->scoreLevels ?? collect()];
         } else {
+            if ($examination->subcourse) {
+                $sources[] = ['source' => 'subcourse', 'mode' => $examination->subcourse->grading_mode, 'levels' => $examination->subcourse->scoreLevels];
+            }
             $sources[] = ['source' => 'course', 'mode' => $examination->course?->grading_mode, 'levels' => $examination->course?->scoreLevels ?? collect()];
         }
 
@@ -191,6 +201,7 @@ class ExaminationResultController extends Controller
                 ->where('unit_id', $examination->unit_id)
                 ->where('class_id', $classId)
                 ->where('status', 'approved')
+                ->when($examination->subcourse_id, fn ($query, $subcourseId) => $query->where('subcourse_id', $subcourseId))
                 ->when($search, fn ($query, $search) => $query->whereHas('student', fn ($query) => $query
                     ->where('admission_number', 'like', "%{$search}%")
                     ->orWhere('first_name', 'like', "%{$search}%")
@@ -206,6 +217,7 @@ class ExaminationResultController extends Controller
         return SemesterRegistration::query()
             ->with(['student:id,admission_number,first_name,last_name', 'class:id,name,code'])
             ->where('course_id', $examination->course_id)
+            ->when($examination->subcourse_id, fn ($query, $subcourseId) => $query->where('subcourse_id', $subcourseId))
             ->where('class_id', $classId)
             ->where('status', 'approved')
             ->when($search, fn ($query, $search) => $query->whereHas('student', fn ($query) => $query

@@ -18,6 +18,7 @@ const props = defineProps({
 const filter = reactive({
     department_id: props.filters.department_id || '',
     course_id: props.filters.course_id || '',
+    subcourse_id: props.filters.subcourse_id || '',
     unit_id: props.filters.unit_id || '',
     examination_id: props.filters.examination_id || '',
     class_id: props.filters.class_id || '',
@@ -27,17 +28,22 @@ const filter = reactive({
 const resultForm = useForm({ class_id: filter.class_id, results: [] });
 
 const selectedCourse = computed(() => props.courses.find((course) => Number(course.id) === Number(filter.course_id)));
-const filteredCourses = computed(() => props.courses.filter((course) => !filter.department_id || Number(course.department_id) === Number(filter.department_id)));
-const filteredUnits = computed(() => props.units.filter((unit) => !filter.course_id || Number(unit.course_id) === Number(filter.course_id)));
+const filteredCourses = computed(() => props.courses
+    .filter((course) => !course.parent_course_id)
+    .filter((course) => !filter.department_id || Number(course.department_id) === Number(filter.department_id)));
+const selectedSubcourse = computed(() => selectedCourse.value?.subcourses?.find((course) => Number(course.id) === Number(filter.subcourse_id)));
+const selectedAcademicTarget = computed(() => selectedSubcourse.value || selectedCourse.value);
+const filteredUnits = computed(() => props.units.filter((unit) => !selectedAcademicTarget.value || Number(unit.course_id) === Number(selectedAcademicTarget.value.id)));
 const filteredClasses = computed(() => props.classes.filter((collegeClass) => !filter.course_id || Number(collegeClass.course_id) === Number(filter.course_id)));
 const filteredExaminations = computed(() => props.examinations.filter((exam) => {
     if (!filter.course_id) return false;
 
-    if (selectedCourse.value?.has_units) {
+    if (selectedAcademicTarget.value?.has_units) {
         return filter.unit_id && Number(exam.unit_id) === Number(filter.unit_id);
     }
 
-    return Number(exam.course_id) === Number(filter.course_id);
+    return Number(exam.course_id) === Number(filter.course_id)
+        && Number(exam.subcourse_id || 0) === Number(filter.subcourse_id || 0);
 }));
 const gradeOptions = computed(() => {
     const grades = props.selectedExamination?.effective_score_levels?.map((level) => level.grade).filter(Boolean) || [];
@@ -53,6 +59,7 @@ const applyFilters = () => {
 
 const resetAfterDepartment = () => {
     filter.course_id = '';
+    filter.subcourse_id = '';
     filter.unit_id = '';
     filter.examination_id = '';
     filter.class_id = '';
@@ -62,6 +69,16 @@ const resetAfterDepartment = () => {
 };
 
 const resetAfterCourse = () => {
+    filter.subcourse_id = '';
+    filter.unit_id = '';
+    filter.examination_id = '';
+    filter.class_id = '';
+    filter.result_search = '';
+    filter.result_status = '';
+    applyFilters();
+};
+
+const resetAfterSubcourse = () => {
     filter.unit_id = '';
     filter.examination_id = '';
     filter.class_id = '';
@@ -170,7 +187,14 @@ const saveResults = () => {
                         <option v-for="course in filteredCourses" :key="course.id" :value="course.id">{{ course.code }} - {{ course.name }}</option>
                     </select>
                 </div>
-                <div v-if="selectedCourse?.has_units">
+                <div v-if="selectedCourse?.subcourses?.length">
+                    <label v-if="selectedCourse?.subcourses?.length" class="text-xs font-semibold uppercase tracking-wider text-gray-500">Subcourse</label>
+                    <select v-if="selectedCourse?.subcourses?.length" v-model="filter.subcourse_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16]" :disabled="!filter.course_id" @change="resetAfterSubcourse">
+                        <option value="">General course</option>
+                        <option v-for="subcourse in selectedCourse.subcourses" :key="subcourse.id" :value="subcourse.id">{{ subcourse.code }} - {{ subcourse.name }}</option>
+                    </select>
+                </div>
+                <div v-if="selectedAcademicTarget?.has_units">
                     <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Unit</label>
                     <select v-model="filter.unit_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16]" :disabled="!filter.course_id" @change="resetAfterUnit">
                         <option value="">Select unit</option>
@@ -179,7 +203,7 @@ const saveResults = () => {
                 </div>
                 <div>
                     <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Examination</label>
-                    <select v-model="filter.examination_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16]" :disabled="!filter.course_id || (selectedCourse?.has_units && !filter.unit_id)" @change="applyFilters">
+                    <select v-model="filter.examination_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16]" :disabled="!filter.course_id || (selectedAcademicTarget?.has_units && !filter.unit_id)" @change="applyFilters">
                         <option value="">Select examination</option>
                         <option v-for="exam in filteredExaminations" :key="exam.id" :value="exam.id">{{ exam.code ? `${exam.code} - ` : '' }}{{ exam.name }}</option>
                     </select>

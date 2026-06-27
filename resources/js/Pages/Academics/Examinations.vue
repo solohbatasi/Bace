@@ -27,6 +27,7 @@ const filter = reactive({
     search: props.filters.search || '',
     owner_type: props.filters.owner_type || '',
     course_id: props.filters.course_id || '',
+    subcourse_id: props.filters.subcourse_id || '',
     unit_id: props.filters.unit_id || '',
     scope_type: props.filters.scope_type || '',
     status: props.filters.status || '',
@@ -36,6 +37,7 @@ const form = useForm({
     owner_type: 'course',
     department_id: '',
     course_id: '',
+    subcourse_id: '',
     unit_id: '',
     academic_year_id: props.academicYears.find((year) => year.is_current)?.id || '',
     semester_id: props.semesters.find((semester) => semester.is_current)?.id || '',
@@ -75,7 +77,9 @@ onClickOutside(courseDropdown, () => {
 
 watch(filter, () => router.get(route('academics.examinations.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
-const coursesForDepartment = (departmentId) => props.courses.filter((course) => !departmentId || Number(course.department_id) === Number(departmentId));
+const coursesForDepartment = (departmentId) => props.courses
+    .filter((course) => !course.parent_course_id)
+    .filter((course) => !departmentId || Number(course.department_id) === Number(departmentId));
 const filteredDepartments = computed(() => {
     const search = searchableSelects.department.search.toLowerCase();
     if (!search) return props.departments;
@@ -95,7 +99,11 @@ const filteredCourses = computed(() => {
         course.code.toLowerCase().includes(search)
     );
 });
-const filteredUnits = computed(() => props.units.filter((unit) => !form.course_id || Number(unit.course_id) === Number(form.course_id)));
+const selectedCourse = computed(() => props.courses.find((course) => Number(course.id) === Number(form.course_id)));
+const subcoursesForSelectedCourse = computed(() => selectedCourse.value?.subcourses || []);
+const selectedSubcourse = computed(() => subcoursesForSelectedCourse.value.find((course) => Number(course.id) === Number(form.subcourse_id)));
+const examinationTargetId = computed(() => form.subcourse_id || form.course_id);
+const filteredUnits = computed(() => props.units.filter((unit) => !examinationTargetId.value || Number(unit.course_id) === Number(examinationTargetId.value)));
 const semesterOptions = computed(() => props.semesters.filter((semester) => !form.academic_year_id || Number(semester.academic_year_id) === Number(form.academic_year_id)));
 const stats = computed(() => ({
     total: props.examinations.total,
@@ -136,6 +144,7 @@ const resetForm = () => {
     form.owner_type = 'course';
     form.department_id = '';
     form.course_id = '';
+    form.subcourse_id = '';
     form.unit_id = '';
     form.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || '';
     form.semester_id = props.semesters.find((semester) => semester.is_current)?.id || '';
@@ -168,7 +177,8 @@ const edit = (examination) => {
     resetForm();
     form.id = examination.id;
     form.owner_type = examination.unit_id ? 'unit' : 'course';
-    form.course_id = examination.course_id || examination.unit?.course_id || '';
+    form.course_id = examination.course_id || examination.subcourse?.parent_course_id || examination.unit?.course?.parent_course_id || examination.unit?.course_id || '';
+    form.subcourse_id = examination.subcourse_id || '';
     form.department_id = props.courses.find((course) => Number(course.id) === Number(form.course_id))?.department_id || '';
     form.unit_id = examination.unit_id || '';
     form.academic_year_id = examination.academic_year_id || '';
@@ -203,9 +213,14 @@ const onCourseChange = () => {
     }
 };
 
+const onSubcourseChange = () => {
+    onCourseChange();
+};
+
 const selectDepartment = (department) => {
     form.department_id = department.id;
     form.course_id = '';
+    form.subcourse_id = '';
     form.unit_id = '';
     searchableSelects.department.isOpen = false;
     searchableSelects.department.search = '';
@@ -213,6 +228,7 @@ const selectDepartment = (department) => {
 
 const selectCourse = (course) => {
     form.course_id = course.id;
+    form.subcourse_id = '';
     if (!form.department_id) {
         form.department_id = course.department_id;
     }
@@ -388,8 +404,8 @@ const confirmDelete = () => {
                             <p class="text-xs text-gray-500">{{ exam.description || 'No description' }}</p>
                         </td>
                         <td class="px-5 py-4">
-                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ exam.unit ? `${exam.unit.code} - ${exam.unit.name}` : `${exam.course?.code} - ${exam.course?.name}` }}</p>
-                            <p class="text-xs text-gray-500">{{ exam.unit ? `Unit in ${exam.unit.course?.code || 'course'}` : 'Course examination' }}</p>
+                            <p class="font-medium text-gray-700 dark:text-gray-300">{{ exam.unit ? `${exam.unit.code} - ${exam.unit.name}` : `${exam.subcourse?.code || exam.course?.code} - ${exam.subcourse?.name || exam.course?.name}` }}</p>
+                            <p class="text-xs text-gray-500">{{ exam.unit ? `Unit in ${exam.unit.course?.code || 'course'}` : (exam.subcourse ? `Subcourse under ${exam.course?.code}` : 'Course examination') }}</p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             <p>{{ scopeLabel(exam.scope_type) }}</p>
@@ -515,6 +531,14 @@ const confirmDelete = () => {
                                     </button>
                                     <div v-if="!filteredCourses.length" class="px-3 py-2 text-sm text-gray-500">No courses found</div>
                                 </div>
+                            </div>
+
+                            <div v-if="subcoursesForSelectedCourse.length">
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Subcourse</label>
+                                <select v-model="form.subcourse_id" class="mt-1 h-10 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" @change="onSubcourseChange">
+                                    <option value="">General course</option>
+                                    <option v-for="subcourse in subcoursesForSelectedCourse" :key="subcourse.id" :value="subcourse.id">{{ subcourse.code }} - {{ subcourse.name }}</option>
+                                </select>
                             </div>
 
                             <div v-if="form.owner_type === 'unit'" class="md:col-span-2">

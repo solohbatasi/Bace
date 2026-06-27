@@ -34,6 +34,7 @@ const studentForm = useForm({
     id: null,
     department_id: '',
     course_id: '',
+    subcourse_id: '',
     course_fee: '',
     class_id: '',
     academic_year_id: props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '',
@@ -130,6 +131,9 @@ const selectedCourseLabel = computed(() => {
 });
 
 const selectedCourse = computed(() => props.courses.find(c => c.id === studentForm.course_id));
+const subcoursesForSelectedCourse = computed(() => selectedCourse.value?.subcourses || []);
+const selectedSubcourse = computed(() => subcoursesForSelectedCourse.value.find((course) => Number(course.id) === Number(studentForm.subcourse_id)));
+const selectedAcademicTarget = computed(() => selectedSubcourse.value || selectedCourse.value);
 const additionalCourseIds = computed(() => studentForm.additional_courses.map((course) => Number(course.course_id)).filter(Boolean));
 const unavailableAdditionalCourseIds = computed(() => [
     Number(studentForm.course_id),
@@ -150,9 +154,11 @@ const dateInputValue = (value) => {
 const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
 
 const coursesForDepartment = (departmentId) => {
-    if (!departmentId) return props.courses;
+    const parentCourses = props.courses.filter((course) => !course.parent_course_id);
 
-    return props.courses.filter((course) => Number(course.department_id) === Number(departmentId));
+    if (!departmentId) return parentCourses;
+
+    return parentCourses.filter((course) => Number(course.department_id) === Number(departmentId));
 };
 
 const classesForCourse = (courseId) => props.classes.filter((cls) => {
@@ -162,7 +168,15 @@ const classesForCourse = (courseId) => props.classes.filter((cls) => {
     return matchesCourse && matchesYear;
 });
 
-const courseFee = (courseId) => props.courses.find((course) => Number(course.id) === Number(courseId))?.fees ?? '';
+const courseFee = (courseId, subcourseId = null) => {
+    const course = props.courses.find((course) => Number(course.id) === Number(courseId));
+    const subcourse = course?.subcourses?.find((child) => Number(child.id) === Number(subcourseId));
+
+    return subcourse?.fees ?? course?.fees ?? '';
+};
+
+const subcoursesForCourse = (courseId) => props.courses.find((course) => Number(course.id) === Number(courseId))?.subcourses || [];
+const targetCourseIdForUnits = (courseId, subcourseId = null) => subcourseId || courseId;
 
 const showingEnrollmentModal = ref(false);
 const deletingStudent = ref(null);
@@ -200,6 +214,7 @@ const resetStudentForm = () => {
     studentForm.photo = null;
     studentForm.photo_preview = null;
     studentForm.course_fee = '';
+    studentForm.subcourse_id = '';
     courseUnits.value = [];
     selectedUnits.value = [];
     isEditing.value = false;
@@ -228,6 +243,7 @@ const editStudent = (student) => {
     studentForm.id = student.id;
     studentForm.department_id = student.department_id;
     studentForm.course_id = student.course_id;
+    studentForm.subcourse_id = student.subcourse_id || '';
     studentForm.course_fee = student.course_fee ?? selectedCourse.value?.fees ?? '';
     studentForm.class_id = student.class_id;
     studentForm.academic_year_id = props.academicYears.find((year) => year.is_current)?.id || props.academicYears[0]?.id || '';
@@ -262,7 +278,7 @@ const editStudent = (student) => {
 
     // Fetch course units for editing
     if (student.course_id) {
-        fetchCourseUnits(student.course_id);
+        fetchCourseUnits(targetCourseIdForUnits(student.course_id, student.subcourse_id));
     }
 
     showingEnrollmentModal.value = true;
@@ -319,6 +335,7 @@ const fetchCourseUnits = async (courseId) => {
 // Watch course_id changes for unit loading
 watch(() => studentForm.course_id, (newCourseId) => {
     const course = props.courses.find(c => c.id === newCourseId);
+    studentForm.subcourse_id = '';
     if (!isEditing.value || !studentForm.course_fee) {
         studentForm.course_fee = course?.fees ?? '';
     }
@@ -328,11 +345,20 @@ watch(() => studentForm.course_id, (newCourseId) => {
     }
 
     if (newCourseId && !isEditing.value) {
-        fetchCourseUnits(newCourseId);
+        fetchCourseUnits(targetCourseIdForUnits(newCourseId));
     } else if (!newCourseId) {
         courseUnits.value = [];
         selectedUnits.value = [];
         studentForm.course_fee = '';
+    }
+});
+
+watch(() => studentForm.subcourse_id, (newSubcourseId) => {
+    const target = selectedAcademicTarget.value;
+    studentForm.course_fee = target?.fees ?? selectedCourse.value?.fees ?? '';
+
+    if (studentForm.course_id && !isEditing.value) {
+        fetchCourseUnits(targetCourseIdForUnits(studentForm.course_id, newSubcourseId));
     }
 });
 
@@ -350,6 +376,7 @@ watch(() => studentForm.academic_year_id, () => {
 const selectDepartment = (dept) => {
     studentForm.department_id = dept.id;
     studentForm.course_id = '';
+    studentForm.subcourse_id = '';
     studentForm.class_id = '';
     studentForm.course_fee = '';
     courseUnits.value = [];
@@ -360,6 +387,7 @@ const selectDepartment = (dept) => {
 
 const selectCourse = (course) => {
     studentForm.course_id = course.id;
+    studentForm.subcourse_id = '';
     studentForm.course_fee = course.fees ?? '';
     searchableSelects.course.isOpen = false;
     searchableSelects.course.search = '';
@@ -375,6 +403,7 @@ const addAdditionalCourse = () => {
     studentForm.additional_courses.push({
         department_id: '',
         course_id: '',
+        subcourse_id: '',
         class_id: '',
         course_fee: '',
         units: [],
@@ -389,12 +418,19 @@ const removeAdditionalCourse = (index) => {
 
 const handleAdditionalCourseChange = (courseRegistration) => {
     courseRegistration.class_id = '';
+    courseRegistration.subcourse_id = '';
     courseRegistration.course_fee = courseFee(courseRegistration.course_id);
+    fetchAdditionalCourseUnits(courseRegistration);
+};
+
+const handleAdditionalSubcourseChange = (courseRegistration) => {
+    courseRegistration.course_fee = courseFee(courseRegistration.course_id, courseRegistration.subcourse_id);
     fetchAdditionalCourseUnits(courseRegistration);
 };
 
 const handleAdditionalDepartmentChange = (courseRegistration) => {
     courseRegistration.course_id = '';
+    courseRegistration.subcourse_id = '';
     courseRegistration.class_id = '';
     courseRegistration.course_fee = '';
     courseRegistration.units = [];
@@ -410,7 +446,7 @@ const fetchAdditionalCourseUnits = async (courseRegistration) => {
 
     courseRegistration.loading_units = true;
     try {
-        const response = await axios.get(route('api.courses.units', courseRegistration.course_id));
+        const response = await axios.get(route('api.courses.units', targetCourseIdForUnits(courseRegistration.course_id, courseRegistration.subcourse_id)));
         courseRegistration.available_units = response.data;
         courseRegistration.units = response.data.map(unit => unit.id);
     } catch (error) {
@@ -423,6 +459,7 @@ const fetchAdditionalCourseUnits = async (courseRegistration) => {
 const additionalCoursePayload = () => studentForm.additional_courses.map((courseRegistration) => ({
     department_id: courseRegistration.department_id,
     course_id: courseRegistration.course_id,
+    subcourse_id: courseRegistration.subcourse_id,
     class_id: courseRegistration.class_id,
     course_fee: courseRegistration.course_fee,
     units: courseRegistration.units || [],
@@ -904,6 +941,18 @@ const exportCsv = () => {
                             </div>
 
                             <!-- Class - Searchable Select -->
+                            <div v-if="subcoursesForSelectedCourse.length">
+                                <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Subcourse</label>
+                                <select v-model="studentForm.subcourse_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
+                                    <option value="">General course</option>
+                                    <option v-for="subcourse in subcoursesForSelectedCourse" :key="subcourse.id" :value="subcourse.id">
+                                        {{ subcourse.code }} - {{ subcourse.name }}
+                                    </option>
+                                </select>
+                                <p v-if="studentForm.errors.subcourse_id" class="mt-1 text-xs text-red-400">{{ studentForm.errors.subcourse_id }}</p>
+                            </div>
+
+                            <!-- Class - Searchable Select -->
                             <div ref="classDropdown" class="relative">
                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Class</label>
                                 <div
@@ -955,7 +1004,7 @@ const exportCsv = () => {
                             </div>
                             <div>
                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course Amount</label>
-                                <input v-model="studentForm.course_fee" type="number" min="0" step="0.01" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :placeholder="selectedCourse ? `Default: ${selectedCourse.fees}` : 'Select course first'">
+                                <input v-model="studentForm.course_fee" type="number" min="0" step="0.01" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :placeholder="selectedAcademicTarget ? `Default: ${selectedAcademicTarget.fees}` : 'Select course first'">
                                 <p v-if="studentForm.errors.course_fee" class="mt-1 text-xs text-red-400">{{ studentForm.errors.course_fee }}</p>
                             </div>
                             <div class="md:col-span-3 rounded-md border border-gray-200 p-3 dark:border-[#2a3040]">
@@ -977,7 +1026,7 @@ const exportCsv = () => {
                                     </div>
                                 </div>
                                 <div v-if="studentForm.additional_courses.length" class="mt-3 space-y-3">
-                                    <div v-for="(courseRegistration, index) in studentForm.additional_courses" :key="index" class="grid gap-3 rounded-md bg-gray-50 p-3 md:grid-cols-4 dark:bg-[#151a25]">
+                                    <div v-for="(courseRegistration, index) in studentForm.additional_courses" :key="index" class="grid gap-3 rounded-md bg-gray-50 p-3 md:grid-cols-5 dark:bg-[#151a25]">
                                         <div>
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Department</label>
                                             <select v-model="courseRegistration.department_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required @change="handleAdditionalDepartmentChange(courseRegistration)">
@@ -1010,14 +1059,23 @@ const exportCsv = () => {
                                                 </option>
                                             </select>
                                         </div>
+                                        <div v-if="subcoursesForCourse(courseRegistration.course_id).length">
+                                            <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Subcourse</label>
+                                            <select v-model="courseRegistration.subcourse_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.course_id" @change="handleAdditionalSubcourseChange(courseRegistration)">
+                                                <option value="">General course</option>
+                                                <option v-for="subcourse in subcoursesForCourse(courseRegistration.course_id)" :key="subcourse.id" :value="subcourse.id">
+                                                    {{ subcourse.code }} - {{ subcourse.name }}
+                                                </option>
+                                            </select>
+                                        </div>
                                         <div>
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course Amount</label>
                                             <div class="mt-1 flex gap-2">
-                                                <input v-model="courseRegistration.course_fee" type="number" min="0" step="0.01" class="w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :placeholder="courseRegistration.course_id ? `Default: ${courseFee(courseRegistration.course_id)}` : 'Select course first'">
+                                                <input v-model="courseRegistration.course_fee" type="number" min="0" step="0.01" class="w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :placeholder="courseRegistration.course_id ? `Default: ${courseFee(courseRegistration.course_id, courseRegistration.subcourse_id)}` : 'Select course first'">
                                                 <button type="button" class="rounded-md border border-red-500/30 px-2.5 text-xs text-red-400 transition hover:border-red-400" @click="removeAdditionalCourse(index)">Remove</button>
                                             </div>
                                         </div>
-                                        <div class="md:col-span-4">
+                                        <div class="md:col-span-5">
                                             <div class="flex items-center justify-between">
                                                 <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Units</label>
                                                 <span class="text-xs text-gray-500">{{ courseRegistration.units?.length || 0 }} selected</span>
@@ -1037,7 +1095,7 @@ const exportCsv = () => {
                                                 </label>
                                             </div>
                                             <p v-else class="mt-2 text-xs text-gray-500">
-                                                {{ courseRegistration.course_id ? 'No active units found for this course.' : 'Select a course to load units.' }}
+                                                {{ courseRegistration.course_id ? 'No active units found for this course or subcourse.' : 'Select a course to load units.' }}
                                             </p>
                                         </div>
                                     </div>
@@ -1064,7 +1122,7 @@ const exportCsv = () => {
 
                     <!-- Course Units -->
                     <div v-if="courseUnits.length && !isEditing" class="md:col-span-2">
-                        <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Course Units</h3>
+                        <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-400">Units</h3>
                         <p class="text-xs text-gray-500">Select the units the student will be enrolled in (default: all units)</p>
                         <div v-if="loadingUnits" class="mt-2 flex items-center gap-2 text-sm text-gray-500">
                             <svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

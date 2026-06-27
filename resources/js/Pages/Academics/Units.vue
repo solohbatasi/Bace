@@ -245,7 +245,10 @@ const setScoreLevelGradingFlag = (flag, checked) => {
                             <p class="font-semibold text-gray-900 dark:text-white">{{ unit.code }} - {{ unit.name }}</p>
                             <p class="text-xs text-gray-500">{{ unit.credit_hours }} credit hours, {{ unit.lecturer_assignments_count }} lecturer assignments</p>
                         </td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ unit.course?.name || '-' }}</td>
+                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
+                            <p>{{ unit.course?.name || '-' }}</p>
+                            <p v-if="unit.course?.parent_course" class="text-xs text-gray-500">Under {{ unit.course.parent_course.code }} - {{ unit.course.parent_course.name }}</p>
+                        </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ unit.department?.name || '-' }}</td>
                         <td class="px-5 py-4 text-gray-500">Y{{ unit.year_level }} S{{ unit.semester_sequence }}</td>
                         <td class="px-5 py-4">
@@ -311,6 +314,7 @@ const setScoreLevelGradingFlag = (flag, checked) => {
                                 >
                                     <span class="block font-semibold">{{ course.code }}</span>
                                     <span class="text-xs text-gray-500">{{ course.name }}</span>
+                                    <span v-if="course.parent_course_id" class="block text-[11px] text-violet-500">Subcourse</span>
                                 </button>
                                 <div v-if="!formCourses.length" class="px-3 py-2 text-sm text-gray-500">
                                     No unit-based courses found

@@ -36,10 +36,12 @@ class StudentController extends Controller
                 ->with([
                     'department:id,name,code',
                     'course:id,name,code,fees',
+                    'subcourse:id,parent_course_id,name,code,fees',
                     'class:id,name,code',
                     'enrollments.unit:id,course_id',
                     'semesterRegistrations.enrollments:id,semester_registration_id,unit_id',
                     'semesterRegistrations.course:id,name,code,department_id,fees',
+                    'semesterRegistrations.subcourse:id,parent_course_id,name,code,department_id,fees',
                     'semesterRegistrations.class:id,course_id',
                     'payments' => fn ($query) => $query
                         ->where('status', 'confirmed')
@@ -53,7 +55,10 @@ class StudentController extends Controller
                 ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
                 ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where(fn ($query) => $query
                     ->where('course_id', $courseId)
-                    ->orWhereHas('semesterRegistrations', fn ($query) => $query->where('course_id', $courseId))))
+                    ->orWhere('subcourse_id', $courseId)
+                    ->orWhereHas('semesterRegistrations', fn ($query) => $query
+                        ->where('course_id', $courseId)
+                        ->orWhere('subcourse_id', $courseId))))
                 ->when($filters['class_id'] ?? null, fn ($query, $classId) => $query->where('class_id', $classId))
                 ->latest()
                 ->paginate(20)
@@ -61,7 +66,9 @@ class StudentController extends Controller
                 ->through(fn (Student $student) => $this->studentTableData($student)),
             'filters' => $filters,
             'statuses' => Student::STATUSES,
-            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'department_id', 'fees']),
+            'courses' => Course::with(['subcourses' => fn ($query) => $query->where('is_active', true)->orderBy('name')])
+                ->orderBy('name')
+                ->get(['id', 'parent_course_id', 'name', 'code', 'department_id', 'fees', 'has_units', 'is_active']),
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id', 'department_id', 'academic_year_id']),
             'academicYears' => AcademicYear::orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
@@ -118,7 +125,7 @@ class StudentController extends Controller
 
             // Filter out Vue form helper properties
             $allowedKeys = [
-                'department_id', 'course_id', 'course_fee', 'class_id', 'admission_number',
+                'department_id', 'course_id', 'subcourse_id', 'course_fee', 'class_id', 'admission_number',
                 'first_name', 'middle_name', 'last_name', 'gender', 'date_of_birth',
                 'email', 'phone', 'address', 'guardian_name',
                 'guardian_relationship', 'guardian_phone', 'guardian_email',
@@ -157,6 +164,7 @@ class StudentController extends Controller
             $validated = $request->validate([
                 'department_id' => ['required', 'exists:departments,id'],
                 'course_id' => ['required', 'exists:courses,id'],
+                'subcourse_id' => ['nullable', 'exists:courses,id'],
                 'course_fee' => ['nullable', 'numeric', 'min:0'],
                 'class_id' => [
                     'required',
@@ -189,7 +197,8 @@ class StudentController extends Controller
                 'units.*' => ['exists:units,id'],
                 'additional_courses' => ['nullable', 'array'],
                 'additional_courses.*.department_id' => ['required', 'exists:departments,id'],
-                'additional_courses.*.course_id' => ['required', 'distinct', 'exists:courses,id'],
+                'additional_courses.*.course_id' => ['required', 'exists:courses,id'],
+                'additional_courses.*.subcourse_id' => ['nullable', 'exists:courses,id'],
                 'additional_courses.*.class_id' => ['required', 'exists:classes,id'],
                 'additional_courses.*.course_fee' => ['nullable', 'numeric', 'min:0'],
                 'additional_courses.*.units' => ['nullable', 'array'],
@@ -235,6 +244,7 @@ class StudentController extends Controller
                 $this->createCourseRegistration(
                     student: $student,
                     courseId: (int) $validated['course_id'],
+                    subcourseId: ($validated['subcourse_id'] ?? null) ? (int) $validated['subcourse_id'] : null,
                     classId: (int) $validated['class_id'],
                     courseFee: $validated['course_fee'] ?? null,
                     academicYearId: (int) $validated['academic_year_id'],
@@ -244,13 +254,15 @@ class StudentController extends Controller
                 );
 
                 foreach ($validated['additional_courses'] ?? [] as $additionalCourse) {
-                    if ((int) $additionalCourse['course_id'] === (int) $validated['course_id']) {
+                    if ((int) $additionalCourse['course_id'] === (int) $validated['course_id']
+                        && (int) ($additionalCourse['subcourse_id'] ?? 0) === (int) ($validated['subcourse_id'] ?? 0)) {
                         continue;
                     }
 
                     $this->createCourseRegistration(
                         student: $student,
                         courseId: (int) $additionalCourse['course_id'],
+                        subcourseId: ($additionalCourse['subcourse_id'] ?? null) ? (int) $additionalCourse['subcourse_id'] : null,
                         classId: (int) $additionalCourse['class_id'],
                         courseFee: $additionalCourse['course_fee'] ?? null,
                         academicYearId: (int) $validated['academic_year_id'],
@@ -336,13 +348,15 @@ class StudentController extends Controller
             }
 
             foreach ($request->validated('additional_courses', []) as $additionalCourse) {
-                if ((int) $additionalCourse['course_id'] === (int) $student->course_id) {
+                if ((int) $additionalCourse['course_id'] === (int) $student->course_id
+                    && (int) ($additionalCourse['subcourse_id'] ?? 0) === (int) ($student->subcourse_id ?? 0)) {
                     continue;
                 }
 
                 $this->createCourseRegistration(
                     student: $student,
                     courseId: (int) $additionalCourse['course_id'],
+                    subcourseId: ($additionalCourse['subcourse_id'] ?? null) ? (int) $additionalCourse['subcourse_id'] : null,
                     classId: (int) $additionalCourse['class_id'],
                     courseFee: $additionalCourse['course_fee'] ?? null,
                     academicYearId: (int) $request->validated('academic_year_id'),
@@ -371,7 +385,9 @@ class StudentController extends Controller
         return [
             'statuses' => Student::STATUSES,
             'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
-            'courses' => Course::orderBy('name')->get(['id', 'name', 'code', 'department_id', 'fees']),
+            'courses' => Course::with(['subcourses' => fn ($query) => $query->where('is_active', true)->orderBy('name')])
+                ->orderBy('name')
+                ->get(['id', 'parent_course_id', 'name', 'code', 'department_id', 'fees', 'has_units', 'is_active']),
             'classes' => CollegeClass::orderBy('name')->get(['id', 'name', 'code', 'course_id']),
         ];
     }
@@ -385,12 +401,16 @@ class StudentController extends Controller
         $registeredCourses = collect([
             [
                 'id' => $student->course?->id,
+                'subcourse_id' => $student->subcourse?->id,
                 'name' => $student->course?->name,
                 'code' => $student->course?->code,
+                'subcourse_name' => $student->subcourse?->name,
+                'subcourse_code' => $student->subcourse?->code,
                 'department_id' => $student->department_id,
                 'class_id' => $student->class_id,
                 'unit_ids' => $student->enrollments
-                    ->filter(fn (Enrollment $enrollment) => (int) $enrollment->unit?->course_id === (int) $student->course_id)
+                    ->filter(fn (Enrollment $enrollment) => (int) $enrollment->course_id === (int) $student->course_id
+                        && (int) ($enrollment->subcourse_id ?? 0) === (int) ($student->subcourse_id ?? 0))
                     ->pluck('unit_id')
                     ->values(),
                 'fee' => $student->course_fee !== null
@@ -400,11 +420,15 @@ class StudentController extends Controller
             ],
         ])->merge($student->semesterRegistrations->map(function (SemesterRegistration $registration) use ($student) {
             $course = $registration->course ?: $registration->class?->course;
+            $subcourse = $registration->subcourse;
 
             return [
                 'id' => $course?->id,
+                'subcourse_id' => $subcourse?->id,
                 'name' => $course?->name,
                 'code' => $course?->code,
+                'subcourse_name' => $subcourse?->name,
+                'subcourse_code' => $subcourse?->code,
                 'department_id' => $course?->department_id,
                 'class_id' => $registration->class_id,
                 'unit_ids' => $registration->enrollments->pluck('unit_id')->values(),
@@ -415,7 +439,7 @@ class StudentController extends Controller
             ];
         }))
             ->filter(fn (array $course) => $course['id'])
-            ->unique('id')
+            ->unique(fn (array $course) => $course['id'].'-'.($course['subcourse_id'] ?? ''))
             ->values()
             ->map(function (array $course) use ($paidByCourse) {
                 $paid = (float) ($paidByCourse[$course['id']] ?? 0);
@@ -438,9 +462,12 @@ class StudentController extends Controller
             'remaining' => $remaining,
             'courses_count' => $registeredCourses->count(),
             'by_course' => $registeredCourses->map(fn (array $course) => [
-                'course_id' => $course['id'],
-                'code' => $course['code'],
-                'name' => $course['name'],
+                    'course_id' => $course['id'],
+                    'subcourse_id' => $course['subcourse_id'] ?? null,
+                    'code' => $course['code'],
+                    'name' => $course['name'],
+                    'subcourse_code' => $course['subcourse_code'] ?? null,
+                    'subcourse_name' => $course['subcourse_name'] ?? null,
                 'fee' => $course['fee'],
                 'paid' => $course['paid'],
                 'remaining' => $course['remaining'],
@@ -455,6 +482,7 @@ class StudentController extends Controller
     private function createCourseRegistration(
         Student $student,
         int $courseId,
+        ?int $subcourseId,
         int $classId,
         mixed $courseFee,
         int $academicYearId,
@@ -466,16 +494,28 @@ class StudentController extends Controller
             ->where('course_id', $courseId)
             ->firstOrFail();
 
+        $subcourse = null;
+        if ($subcourseId) {
+            $subcourse = Course::whereKey($subcourseId)
+                ->where('parent_course_id', $courseId)
+                ->where('is_active', true)
+                ->firstOrFail();
+        }
+
+        $unitCourseId = $subcourse?->id ?? $courseId;
+
         $registration = SemesterRegistration::where('student_id', $student->id)
             ->where('semester_id', $semesterId)
             ->where('academic_year_id', $academicYearId)
             ->where('course_id', $courseId)
+            ->where('subcourse_id', $subcourseId)
             ->first();
 
         if ($registration) {
             $registration->update([
                 'class_id' => $class->id,
                 'course_id' => $courseId,
+                'subcourse_id' => $subcourseId,
                 'course_fee' => $courseFee !== null && $courseFee !== '' ? $courseFee : null,
                 'approved_at' => $registration->approved_at ?: now(),
                 'approved_by' => $registration->approved_by ?: $userId,
@@ -488,6 +528,7 @@ class StudentController extends Controller
                 'student_id' => $student->id,
                 'class_id' => $class->id,
                 'course_id' => $courseId,
+                'subcourse_id' => $subcourseId,
                 'course_fee' => $courseFee !== null && $courseFee !== '' ? $courseFee : null,
                 'semester_id' => $semesterId,
                 'academic_year_id' => $academicYearId,
@@ -500,7 +541,7 @@ class StudentController extends Controller
             ]);
         }
 
-        $unitsQuery = Unit::where('course_id', $courseId)
+        $unitsQuery = Unit::where('course_id', $unitCourseId)
             ->where('is_active', true);
 
         if (is_array($unitIds)) {
@@ -512,6 +553,7 @@ class StudentController extends Controller
                 'semester_registration_id' => $registration->id,
                 'student_id' => $student->id,
                 'course_id' => $courseId,
+                'subcourse_id' => $subcourseId,
                 'unit_id' => $unit->id,
                 'class_id' => $class->id,
                 'semester_id' => $semesterId,
