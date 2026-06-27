@@ -347,11 +347,19 @@ class StudentController extends Controller
                 ]));
             }
 
-            foreach ($request->validated('additional_courses', []) as $additionalCourse) {
+            $additionalCourses = $request->validated('additional_courses', []);
+            $submittedAdditionalKeys = collect();
+
+            foreach ($additionalCourses as $additionalCourse) {
                 if ((int) $additionalCourse['course_id'] === (int) $student->course_id
                     && (int) ($additionalCourse['subcourse_id'] ?? 0) === (int) ($student->subcourse_id ?? 0)) {
                     continue;
                 }
+
+                $submittedAdditionalKeys->push($this->registrationKey(
+                    (int) $additionalCourse['course_id'],
+                    ($additionalCourse['subcourse_id'] ?? null) ? (int) $additionalCourse['subcourse_id'] : null,
+                ));
 
                 $this->createCourseRegistration(
                     student: $student,
@@ -363,6 +371,16 @@ class StudentController extends Controller
                     semesterId: (int) $request->validated('semester_id'),
                     userId: (int) $request->user()->id,
                     unitIds: $additionalCourse['units'] ?? null,
+                );
+            }
+
+            if ($request->validated('academic_year_id') && $request->validated('semester_id')) {
+                $this->removeMissingAdditionalRegistrations(
+                    student: $student,
+                    academicYearId: (int) $request->validated('academic_year_id'),
+                    semesterId: (int) $request->validated('semester_id'),
+                    submittedKeys: $submittedAdditionalKeys,
+                    userId: (int) $request->user()->id,
                 );
             }
         });
@@ -435,7 +453,8 @@ class StudentController extends Controller
                 'fee' => $registration->course_fee !== null
                     ? (float) $registration->course_fee
                     : (float) ($course?->fees ?? 0),
-                'primary' => (int) $course?->id === (int) $student->course_id,
+                'primary' => (int) $course?->id === (int) $student->course_id
+                    && (int) ($subcourse?->id ?? 0) === (int) ($student->subcourse_id ?? 0),
             ];
         }))
             ->filter(fn (array $course) => $course['id'])
@@ -564,6 +583,37 @@ class StudentController extends Controller
                 'updated_by' => $userId,
             ]);
         }
+    }
+
+    private function removeMissingAdditionalRegistrations(
+        Student $student,
+        int $academicYearId,
+        int $semesterId,
+        \Illuminate\Support\Collection $submittedKeys,
+        int $userId,
+    ): void {
+        SemesterRegistration::where('student_id', $student->id)
+            ->where('academic_year_id', $academicYearId)
+            ->where('semester_id', $semesterId)
+            ->where(fn ($query) => $query
+                ->where('course_id', '!=', $student->course_id)
+                ->orWhereRaw('coalesce(subcourse_id, 0) != ?', [(int) ($student->subcourse_id ?? 0)]))
+            ->get()
+            ->each(function (SemesterRegistration $registration) use ($submittedKeys, $userId): void {
+                if ($submittedKeys->contains($this->registrationKey((int) $registration->course_id, $registration->subcourse_id ? (int) $registration->subcourse_id : null))) {
+                    return;
+                }
+
+                $registration->enrollments()->update(['deleted_by' => $userId]);
+                $registration->enrollments()->delete();
+                $registration->forceFill(['deleted_by' => $userId])->save();
+                $registration->delete();
+            });
+    }
+
+    private function registrationKey(int $courseId, ?int $subcourseId = null): string
+    {
+        return $courseId.'-'.($subcourseId ?: 0);
     }
 
     private function getCurrentSemester()
