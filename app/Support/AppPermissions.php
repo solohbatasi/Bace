@@ -17,6 +17,7 @@ class AppPermissions
         'units' => 'Units',
         'lecturers' => 'Lecturers',
         'enrollments' => 'Enrollments',
+        'examinations' => 'Examinations',
         'assignments' => 'Assignments',
         'roles' => 'Roles',
         'permissions' => 'Permissions',

@@ -16,6 +16,7 @@ class Course extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'parent_course_id' => 'integer',
         'duration_semesters' => 'integer',
         'fees' => 'decimal:2',
         'has_units' => 'boolean',
@@ -25,6 +26,16 @@ class Course extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function parentCourse(): BelongsTo
+    {
+        return $this->belongsTo(Course::class, 'parent_course_id');
+    }
+
+    public function subcourses(): HasMany
+    {
+        return $this->hasMany(Course::class, 'parent_course_id');
     }
 
     public function classes(): HasMany
@@ -45,5 +56,15 @@ class Course extends Model
     public function scoreLevels(): HasMany
     {
         return $this->hasMany(ScoreLevel::class)->orderBy('sort_order')->orderBy('min_score');
+    }
+
+    public function examinations(): HasMany
+    {
+        return $this->hasMany(Examination::class);
+    }
+
+    public function subcourseExaminations(): HasMany
+    {
+        return $this->hasMany(Examination::class, 'subcourse_id');
     }
 }

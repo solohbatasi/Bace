@@ -10,6 +10,7 @@ const props = defineProps({
     courses: Object,
     filters: Object,
     departments: Array,
+    parentCourses: Array,
     unitCourses: Array,
     lecturers: Array,
     classes: Array,
@@ -19,7 +20,7 @@ const props = defineProps({
 });
 
 const filter = reactive({ search: props.filters.search || '', department_id: props.filters.department_id || '' });
-const courseForm = useForm({ id: null, department_id: '', code: '', name: '', qualification_level: '', duration_type: 'semesters', duration_semesters: 1, duration: '', fees: 0, has_units: true, grading_mode: 'score_levels_with_grades', description: '', is_active: true });
+const courseForm = useForm({ id: null, department_id: '', parent_course_id: '', code: '', name: '', qualification_level: '', duration_type: 'semesters', duration_semesters: 1, duration: '', fees: 0, has_units: true, grading_mode: 'score_levels_with_grades', description: '', is_active: true });
 const unitForm = useForm({ course_id: '', department_id: '', code: '', name: '', duration: '', grading_mode: 'score_levels_with_grades', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
 const assignmentForm = useForm({ unit_id: '', lecturer_id: '', class_id: '', semester_id: '', academic_year_id: '', is_primary: true });
 const scoreLevelForm = useForm({ grading_mode: 'score_levels_with_grades', levels: [] });
@@ -73,6 +74,7 @@ const resetCourseForm = () => {
     courseForm.clearErrors();
     courseForm.id = null;
     courseForm.department_id = '';
+    courseForm.parent_course_id = '';
     courseForm.code = '';
     courseForm.name = '';
     courseForm.qualification_level = '';
@@ -115,6 +117,7 @@ const editCourse = (course) => {
     resetCourseForm();
     courseForm.id = course.id;
     courseForm.department_id = course.department_id;
+    courseForm.parent_course_id = course.parent_course_id || '';
     courseForm.code = course.code;
     courseForm.name = course.name;
     courseForm.qualification_level = course.qualification_level || '';
@@ -240,6 +243,11 @@ const saveCourse = () => {
     courseForm.id ? courseForm.put(route('academics.courses.update', courseForm.id), options) : courseForm.post(route('academics.courses.store'), options);
 };
 
+const parentCourseOptions = computed(() => props.parentCourses.filter((course) =>
+    Number(course.id) !== Number(courseForm.id) &&
+    (!courseForm.department_id || Number(course.department_id) === Number(courseForm.department_id))
+));
+
 const destroyCourse = (course) => {
     deletingCourse.value = course;
 };
@@ -280,7 +288,7 @@ const exportCsv = () => {
             course.code,
             course.name,
             course.department?.name || '',
-            course.qualification_level || '',
+            course.parent_course ? `Subcourse of ${course.parent_course.code}` : (course.qualification_level || ''),
             course.duration_semesters,
             course.fees,
             (course.units || []).map((unit) => unit.code).join('; '),
@@ -366,7 +374,14 @@ const exportCsv = () => {
                     <tr v-for="course in courses.data" :key="course.id" class="hover:bg-gray-50 dark:hover:bg-[#141925]">
                         <td class="px-5 py-4">
                             <p class="font-semibold text-gray-900 dark:text-white">{{ course.code }} - {{ course.name }}</p>
-                            <p class="text-xs text-gray-500">{{ course.qualification_level || 'No qualification level' }}</p>
+                            <p class="text-xs text-gray-500">
+                                {{ course.parent_course ? `Subcourse of ${course.parent_course.code} - ${course.parent_course.name}` : (course.qualification_level || 'No qualification level') }}
+                            </p>
+                            <div v-if="course.subcourses?.length" class="mt-2 flex flex-wrap gap-1.5">
+                                <span v-for="subcourse in course.subcourses" :key="subcourse.id" class="rounded-md bg-violet-500/10 px-2 py-1 text-[11px] font-medium text-violet-600 dark:text-violet-300">
+                                    {{ subcourse.code }} - {{ subcourse.name }}
+                                </span>
+                            </div>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ course.department?.name || '-' }}</td>
                         <td class="px-5 py-4 text-gray-500">
@@ -421,11 +436,19 @@ const exportCsv = () => {
                 <form id="course-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="saveCourse">
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Department</label>
-                        <select v-model="courseForm.department_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required>
+                        <select v-model="courseForm.department_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required @change="courseForm.parent_course_id = ''">
                             <option value="">Select department</option>
                             <option v-for="department in departments" :key="department.id" :value="department.id">{{ department.name }}</option>
                         </select>
                         <p v-if="courseForm.errors.department_id" class="mt-1 text-xs text-red-400">{{ courseForm.errors.department_id }}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Parent course</label>
+                        <select v-model="courseForm.parent_course_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white">
+                            <option value="">None</option>
+                            <option v-for="course in parentCourseOptions" :key="course.id" :value="course.id">{{ course.code }} - {{ course.name }}</option>
+                        </select>
+                        <p v-if="courseForm.errors.parent_course_id" class="mt-1 text-xs text-red-400">{{ courseForm.errors.parent_course_id }}</p>
                     </div>
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Code</label>
@@ -538,6 +561,7 @@ const exportCsv = () => {
                                 >
                                     <span class="block font-semibold">{{ course.code }}</span>
                                     <span class="text-xs text-gray-500">{{ course.name }}</span>
+                                    <span v-if="course.parent_course_id" class="block text-[11px] text-violet-500">Subcourse</span>
                                 </button>
                                 <div v-if="!unitEligibleCourses.length" class="px-3 py-2 text-sm text-gray-500">
                                     No unit-based courses found

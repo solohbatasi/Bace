@@ -12,6 +12,8 @@ use App\Http\Controllers\AssignmentManagementController;
 use App\Http\Controllers\CourseManagementController;
 use App\Http\Controllers\DepartmentManagementController;
 use App\Http\Controllers\EnrollmentManagementController;
+use App\Http\Controllers\ExaminationManagementController;
+use App\Http\Controllers\ExaminationResultController;
 use App\Http\Controllers\LecturerManagementController;
 use App\Http\Controllers\OrganisationSettingsController;
 use App\Http\Controllers\PaymentController;
@@ -96,6 +98,14 @@ Route::middleware([
         Route::delete('units/{unit}', [UnitManagementController::class, 'destroy'])->name('units.destroy')->middleware('permission:units.delete|classes.manage');
         Route::put('units/{unit}/score-levels', [ScoreLevelController::class, 'updateUnit'])->name('units.score-levels.update')->middleware('permission:units.manage|classes.manage');
         Route::post('units/{unit}/lecturers', [CourseManagementController::class, 'assignLecturer'])->name('units.lecturers.store')->middleware('permission:units.manage|lecturers.manage|classes.manage');
+
+        Route::get('examinations', [ExaminationManagementController::class, 'index'])->name('examinations.index')->middleware('permission:examinations.view|classes.manage');
+        Route::post('examinations', [ExaminationManagementController::class, 'store'])->name('examinations.store')->middleware('permission:examinations.add|classes.manage');
+        Route::put('examinations/{examination}', [ExaminationManagementController::class, 'update'])->name('examinations.update')->middleware('permission:examinations.edit|classes.manage');
+        Route::delete('examinations/{examination}', [ExaminationManagementController::class, 'destroy'])->name('examinations.destroy')->middleware('permission:examinations.delete|classes.manage');
+        Route::put('examinations/{examination}/score-levels', [ScoreLevelController::class, 'updateExamination'])->name('examinations.score-levels.update')->middleware('permission:examinations.manage|classes.manage');
+        Route::get('results', [ExaminationResultController::class, 'index'])->name('results.index')->middleware('permission:examinations.edit|examinations.manage|classes.manage');
+        Route::post('results/{examination}', [ExaminationResultController::class, 'store'])->name('results.store')->middleware('permission:examinations.edit|examinations.manage|classes.manage');
 
         Route::get('enrollments', [EnrollmentManagementController::class, 'index'])->name('enrollments.index')->middleware('permission:enrollments.view|classes.manage');
         Route::post('enrollments/register', [EnrollmentManagementController::class, 'register'])->name('enrollments.register')->middleware('permission:enrollments.add|classes.manage');

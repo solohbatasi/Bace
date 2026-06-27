@@ -8,31 +8,25 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class SemesterRegistration extends Model
+class Examination extends Model
 {
     use HasFactory;
     use SoftDeletes;
 
-    public const STATUSES = ['pending', 'approved', 'dropped', 'transferred'];
+    public const SCOPE_TYPES = ['permanent', 'semester', 'period'];
 
     protected $guarded = [];
 
     protected $casts = [
-        'registered_at' => 'datetime',
-        'approved_at' => 'datetime',
-        'course_fee' => 'decimal:2',
-        'course_score' => 'decimal:2',
+        'starts_on' => 'date',
+        'ends_on' => 'date',
+        'max_score' => 'decimal:2',
+        'weight_percent' => 'decimal:2',
+        'is_analysed' => 'boolean',
+        'include_in_final_analysis' => 'boolean',
+        'can_edit_results' => 'boolean',
+        'is_active' => 'boolean',
     ];
-
-    public function student(): BelongsTo
-    {
-        return $this->belongsTo(Student::class);
-    }
-
-    public function class(): BelongsTo
-    {
-        return $this->belongsTo(CollegeClass::class, 'class_id');
-    }
 
     public function course(): BelongsTo
     {
@@ -44,9 +38,9 @@ class SemesterRegistration extends Model
         return $this->belongsTo(Course::class, 'subcourse_id');
     }
 
-    public function semester(): BelongsTo
+    public function unit(): BelongsTo
     {
-        return $this->belongsTo(Semester::class);
+        return $this->belongsTo(Unit::class);
     }
 
     public function academicYear(): BelongsTo
@@ -54,12 +48,17 @@ class SemesterRegistration extends Model
         return $this->belongsTo(AcademicYear::class);
     }
 
-    public function enrollments(): HasMany
+    public function semester(): BelongsTo
     {
-        return $this->hasMany(Enrollment::class);
+        return $this->belongsTo(Semester::class);
     }
 
-    public function examinationResults(): HasMany
+    public function scoreLevels(): HasMany
+    {
+        return $this->hasMany(ScoreLevel::class)->orderBy('sort_order')->orderBy('min_score');
+    }
+
+    public function results(): HasMany
     {
         return $this->hasMany(ExaminationResult::class);
     }

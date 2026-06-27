@@ -32,17 +32,17 @@ class EnrollmentManagementController extends Controller
                 'canEdit' => $request->user()->hasAnyPermission('enrollments.edit|enrollments.manage|classes.manage'),
                 'canDelete' => $request->user()->hasAnyPermission('enrollments.delete|enrollments.manage|classes.manage'),
             ],
-            'student' => $student?->load(['course:id,name,code', 'class:id,name,code']),
+            'student' => $student?->load(['course:id,name,code', 'subcourse:id,parent_course_id,name,code', 'class:id,name,code']),
             'registrations' => SemesterRegistration::query()
-                ->with(['student:id,admission_number,first_name,last_name', 'course:id,code,name,has_units', 'class:id,name,code,course_id', 'semester:id,name', 'academicYear:id,name', 'enrollments.unit:id,code,name,credit_hours'])
+                ->with(['student:id,admission_number,first_name,last_name', 'course:id,code,name,has_units', 'subcourse:id,parent_course_id,code,name,has_units', 'class:id,name,code,course_id', 'semester:id,name', 'academicYear:id,name', 'enrollments.unit:id,code,name,credit_hours'])
                 ->when(! $canView && ! $canManage, fn ($query) => $query->where('student_id', $student->id))
                 ->latest('registered_at')
                 ->paginate(10),
             'currentYear' => AcademicYear::where('is_current', true)->first(),
             'semesters' => Semester::with('academicYear:id,name')->orderByDesc('starts_on')->get(['id', 'academic_year_id', 'name', 'sequence', 'is_current']),
             'units' => Unit::query()
-                ->with('course:id,name,code')
-                ->when($student, fn ($query) => $query->where('course_id', $student->course_id))
+                ->with('course:id,parent_course_id,name,code')
+                ->when($student, fn ($query) => $query->where('course_id', $student->subcourse_id ?: $student->course_id))
                 ->where('is_active', true)
                 ->orderBy('code')
                 ->get(['id', 'course_id', 'department_id', 'code', 'name', 'credit_hours', 'year_level', 'semester_sequence']),
@@ -67,6 +67,7 @@ class EnrollmentManagementController extends Controller
                 'student_id' => $student->id,
                 'class_id' => $student->class_id,
                 'course_id' => $student->course_id,
+                'subcourse_id' => $student->subcourse_id,
                 'semester_id' => $data['semester_id'],
                 'academic_year_id' => $data['academic_year_id'],
                 'registered_at' => now(),
@@ -80,6 +81,7 @@ class EnrollmentManagementController extends Controller
                     'semester_registration_id' => $registration->id,
                     'student_id' => $student->id,
                     'course_id' => $student->course_id,
+                    'subcourse_id' => $student->subcourse_id,
                     'unit_id' => $unitId,
                     'class_id' => $student->class_id,
                     'semester_id' => $data['semester_id'],

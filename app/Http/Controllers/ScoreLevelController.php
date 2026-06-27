@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Course;
+use App\Models\Examination;
 use App\Models\Unit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,6 +60,31 @@ class ScoreLevelController extends Controller
         });
 
         return back()->with('flash.banner', 'Unit score levels updated.');
+    }
+
+    public function updateExamination(Request $request, Examination $examination): RedirectResponse
+    {
+        abort_unless($request->user()->hasAnyPermission('examinations.manage|classes.manage'), 403);
+
+        [$mode, $levels] = $this->scoreLevelData($request);
+
+        DB::transaction(function () use ($examination, $levels, $mode, $request): void {
+            $examination->update([
+                'grading_mode' => $mode,
+                'updated_by' => $request->user()->id,
+            ]);
+            $examination->scoreLevels()->delete();
+
+            foreach ($levels as $index => $level) {
+                $examination->scoreLevels()->create($level + [
+                    'sort_order' => $index + 1,
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]);
+            }
+        });
+
+        return back()->with('flash.banner', 'Examination score levels updated.');
     }
 
     private function scoreLevelData(Request $request): array

@@ -47,6 +47,11 @@ class Student extends Model
         return $this->belongsTo(Course::class);
     }
 
+    public function subcourse(): BelongsTo
+    {
+        return $this->belongsTo(Course::class, 'subcourse_id');
+    }
+
     public function class(): BelongsTo
     {
         return $this->belongsTo(CollegeClass::class, 'class_id');
