@@ -20,12 +20,17 @@ class PaymentController extends Controller
         abort_unless($request->user()->hasAnyPermission('payments.view|finance.view'), 403);
 
         $filters = $request->only(['search', 'student_id', 'course_id']);
+        $user = $request->user()->loadMissing('student');
+        $isLearner = (bool) $user->student && ! $user->hasAnyPermission('payments.add|payments.edit|payments.delete|finance.manage');
+        $studentId = $isLearner ? $user->student->id : ($filters['student_id'] ?? null);
 
         return Inertia::render('Finance/Payments', [
             'canAdd' => $request->user()->hasAnyPermission('payments.add|finance.manage'),
             'canEdit' => $request->user()->hasAnyPermission('payments.edit|finance.manage'),
             'canDelete' => $request->user()->hasAnyPermission('payments.delete|finance.manage'),
             'canManage' => $request->user()->hasAnyPermission('payments.add|payments.edit|payments.delete|finance.manage'),
+            'isLearner' => $isLearner,
+            'authStudentId' => $user->student?->id,
             'filters' => $filters,
             'paymentDate' => now()->toDateString(),
             'students' => Student::query()
@@ -42,6 +47,7 @@ class PaymentController extends Controller
                     'payments:id,student_id,course_id,amount,status',
                 ])
                 ->orderBy('admission_number')
+                ->when($isLearner, fn ($query) => $query->whereKey($user->student->id))
                 ->get(['id', 'admission_number', 'first_name', 'last_name', 'course_id', 'subcourse_id', 'course_fee'])
                 ->map(fn (Student $student) => $this->studentOption($student)),
             'payments' => Payment::query()
@@ -53,16 +59,16 @@ class PaymentController extends Controller
                         ->where('admission_number', 'like', "%{$search}%")
                         ->orWhere('first_name', 'like', "%{$search}%")
                         ->orWhere('last_name', 'like', "%{$search}%"))))
-                ->when($filters['student_id'] ?? null, fn ($query, $studentId) => $query->where('student_id', $studentId))
+                ->when($studentId, fn ($query, $studentId) => $query->where('student_id', $studentId))
                 ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where('course_id', $courseId))
                 ->latest('payment_date')
                 ->latest()
                 ->paginate(20)
                 ->withQueryString(),
             'summary' => [
-                'total_paid' => Payment::where('status', 'confirmed')->sum('amount'),
-                'payments_count' => Payment::count(),
-                'today_paid' => Payment::whereDate('payment_date', now()->toDateString())->where('status', 'confirmed')->sum('amount'),
+                'total_paid' => Payment::when($isLearner, fn ($query) => $query->where('student_id', $user->student->id))->where('status', 'confirmed')->sum('amount'),
+                'payments_count' => Payment::when($isLearner, fn ($query) => $query->where('student_id', $user->student->id))->count(),
+                'today_paid' => Payment::when($isLearner, fn ($query) => $query->where('student_id', $user->student->id))->whereDate('payment_date', now()->toDateString())->where('status', 'confirmed')->sum('amount'),
             ],
         ]);
     }

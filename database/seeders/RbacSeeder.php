@@ -155,7 +155,7 @@ class RbacSeeder extends Seeder
             ])->pluck('id')
         );
         $student->permissions()->syncWithoutDetaching(
-            $permissions->whereIn('name', ['students.view', 'tickets.view', 'tickets.add'])->pluck('id')
+            $permissions->whereIn('name', ['students.view', 'payments.view', 'tickets.view', 'tickets.add'])->pluck('id')
         );
         $support->permissions()->syncWithoutDetaching(
             $permissions->whereIn('name', ['users.view', 'health.view'])->pluck('id')

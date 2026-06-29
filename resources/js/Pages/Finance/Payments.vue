@@ -11,6 +11,8 @@ const props = defineProps({
     canAdd: Boolean,
     canEdit: Boolean,
     canDelete: Boolean,
+    isLearner: Boolean,
+    authStudentId: Number,
     filters: Object,
     paymentDate: String,
     students: Array,
@@ -23,7 +25,7 @@ const organisation = computed(() => page.props.organisation || {});
 
 const filter = reactive({
     search: props.filters.search || '',
-    student_id: props.filters.student_id || '',
+    student_id: props.isLearner ? (props.authStudentId || '') : (props.filters.student_id || ''),
     course_id: props.filters.course_id || '',
 });
 
@@ -485,7 +487,7 @@ const exportCsv = () => {
 
         <div class="mt-4 flex flex-col justify-between gap-3 xl:flex-row">
             <div class="flex flex-wrap gap-2">
-                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white" type="button" @click="exportCsv">
+                <button v-if="!isLearner" class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white" type="button" @click="exportCsv">
                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16" />
                     </svg>
@@ -498,7 +500,7 @@ const exportCsv = () => {
             </div>
 
             <div class="flex flex-col gap-2 sm:flex-row">
-                <select v-model="filter.student_id" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300">
+                <select v-if="!isLearner" v-model="filter.student_id" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300">
                     <option value="">All learners</option>
                     <option v-for="student in students" :key="student.id" :value="student.id">{{ student.admission_number }} - {{ student.name }}</option>
                 </select>
@@ -506,7 +508,7 @@ const exportCsv = () => {
                     <option value="">All targets</option>
                     <option v-for="course in filterCourses" :key="course.id" :value="course.id">{{ paymentTargetLabel(course) }}</option>
                 </select>
-                <input v-model="filter.search" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300 dark:placeholder:text-gray-600" placeholder="Search learner, ref...">
+                <input v-model="filter.search" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300 dark:placeholder:text-gray-600" :placeholder="isLearner ? 'Search receipt ref...' : 'Search learner, ref...'">
             </div>
         </div>
 
@@ -562,7 +564,7 @@ const exportCsv = () => {
                     </svg>
                 </div>
                 <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No payments found</p>
-                <p class="mt-1 max-w-sm text-sm text-gray-500">Record a payment or adjust the filters to see finance records.</p>
+                <p class="mt-1 max-w-sm text-sm text-gray-500">{{ isLearner ? 'No payment receipts are available for your account yet.' : 'Record a payment or adjust the filters to see finance records.' }}</p>
                 <button v-if="canAdd" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openPaymentModal">+ Add Payment</button>
             </div>
 
@@ -571,7 +573,7 @@ const exportCsv = () => {
             </div>
         </div>
 
-        <DialogModal :show="showingPaymentModal" max-width="2xl" @close="closePaymentModal">
+        <DialogModal :show="showingPaymentModal && canManage" max-width="2xl" @close="closePaymentModal">
             <template #title>{{ paymentForm.id ? 'Edit payment' : 'Add payment' }}</template>
 
             <template #content>
