@@ -143,6 +143,8 @@ class RbacSeeder extends Seeder
         $lecturer->permissions()->syncWithoutDetaching(
             $permissions->whereIn('name', [
                 'students.view',
+                'courses.view',
+                'units.view',
                 'enrollments.view',
                 'examinations.view',
                 'assignments.view',
@@ -155,7 +157,7 @@ class RbacSeeder extends Seeder
             ])->pluck('id')
         );
         $student->permissions()->syncWithoutDetaching(
-            $permissions->whereIn('name', ['students.view', 'payments.view', 'tickets.view', 'tickets.add'])->pluck('id')
+            $permissions->whereIn('name', ['students.view', 'payments.view', 'courses.view', 'units.view', 'tickets.view', 'tickets.add'])->pluck('id')
         );
         $support->permissions()->syncWithoutDetaching(
             $permissions->whereIn('name', ['users.view', 'health.view'])->pluck('id')

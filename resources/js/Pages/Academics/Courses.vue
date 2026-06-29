@@ -8,6 +8,8 @@ import Pagination from '@/Components/Admin/Pagination.vue';
 
 const props = defineProps({
     courses: Object,
+    isLearner: Boolean,
+    isLecturer: Boolean,
     filters: Object,
     departments: Array,
     parentCourses: Array,
@@ -19,7 +21,11 @@ const props = defineProps({
     permissions: Object,
 });
 
-const filter = reactive({ search: props.filters.search || '', department_id: props.filters.department_id || '' });
+const filter = reactive({
+    search: props.filters.search || '',
+    department_id: props.filters.department_id || '',
+    learner_scope: props.filters.learner_scope || 'current',
+});
 const courseForm = useForm({ id: null, department_id: '', parent_course_id: '', code: '', name: '', qualification_level: '', duration_type: 'semesters', duration_semesters: 1, duration: '', fees: 0, has_units: true, grading_mode: 'score_levels_with_grades', description: '', is_active: true });
 const unitForm = useForm({ course_id: '', department_id: '', code: '', name: '', duration: '', grading_mode: 'score_levels_with_grades', credit_hours: 3, year_level: 1, semester_sequence: 1, is_core: true, is_active: true });
 const assignmentForm = useForm({ unit_id: '', lecturer_id: '', class_id: '', semester_id: '', academic_year_id: '', is_primary: true });
@@ -62,13 +68,24 @@ const selectedUnitCourseLabel = computed(() => {
 
     return course ? `${course.code} - ${course.name}` : 'Select course';
 });
+const hasCourseActions = computed(() => Boolean(
+    props.permissions?.canManageCourseScoreLevels ||
+    props.permissions?.canEditCourse ||
+    props.permissions?.canDeleteCourse,
+));
 const stats = computed(() => ({
     total: props.courses.total,
     active: props.courses.data.filter((course) => course.is_active).length,
-    units: props.courses.data.reduce((sum, course) => sum + (course.units_count ?? course.units?.length ?? 0), 0),
-    lecturers: props.lecturers.length,
+    units: props.courses.data.reduce((sum, course) => sum + ((props.isLearner || props.isLecturer) ? (course.units?.length || 0) : (course.units_count ?? course.units?.length ?? 0)), 0),
+    lecturers: props.isLearner ? 0 : props.lecturers.length,
 }));
+const pageTitle = computed(() => props.isLearner ? 'My Courses' : (props.isLecturer ? 'My Teaching Courses' : 'Course Management'));
 const scoreLevelError = computed(() => Object.values(scoreLevelForm.errors)[0]);
+const learnerScopeTabs = [
+    { key: 'current', label: 'Current' },
+    { key: 'history', label: 'History' },
+    { key: 'all', label: 'All' },
+];
 
 const resetCourseForm = () => {
     courseForm.clearErrors();
@@ -306,10 +323,10 @@ const exportCsv = () => {
 </script>
 
 <template>
-    <AppLayout title="Course Management">
+    <AppLayout :title="pageTitle">
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
-                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Total Courses</p>
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">{{ isLearner || isLecturer ? 'Visible Courses' : 'Total Courses' }}</p>
                 <p class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ stats.total }}</p>
             </div>
             <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
@@ -321,14 +338,14 @@ const exportCsv = () => {
                 <p class="mt-2 text-3xl font-bold text-blue-400">{{ stats.units }}</p>
             </div>
             <div class="rounded-md border border-gray-200 bg-white p-5 dark:border-[#273044] dark:bg-[#11141b]">
-                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Lecturers</p>
-                <p class="mt-2 text-3xl font-bold text-amber-400">{{ stats.lecturers }}</p>
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">{{ isLecturer ? 'Teaching Assignments' : 'Lecturers' }}</p>
+                <p class="mt-2 text-3xl font-bold text-amber-400">{{ isLecturer ? courses.data.reduce((sum, course) => sum + (course.teaching_contexts?.length || 0), 0) : stats.lecturers }}</p>
             </div>
         </div>
 
         <div class="mt-4 flex flex-col justify-between gap-3 xl:flex-row">
             <div class="flex flex-wrap gap-2">
-                <button class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white" type="button" @click="exportCsv">
+                <button v-if="permissions?.canExport" class="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-500 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-400 dark:hover:border-violet-500/50 dark:hover:text-white" type="button" @click="exportCsv">
                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16" />
                     </svg>
@@ -349,6 +366,18 @@ const exportCsv = () => {
             </div>
 
             <div class="flex flex-col gap-2 sm:flex-row">
+                <div v-if="isLearner" class="flex rounded-md border border-gray-200 bg-white p-0.5 dark:border-[#2a3040] dark:bg-[#11141b]">
+                    <button
+                        v-for="tab in learnerScopeTabs"
+                        :key="tab.key"
+                        type="button"
+                        class="h-7 rounded px-3 text-xs font-semibold transition"
+                        :class="filter.learner_scope === tab.key ? 'bg-violet-500 text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'"
+                        @click="filter.learner_scope = tab.key"
+                    >
+                        {{ tab.label }}
+                    </button>
+                </div>
                 <select v-model="filter.department_id" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300">
                     <option value="">All departments</option>
                     <option v-for="department in departments" :key="department.id" :value="department.id">{{ department.code }} - {{ department.name }}</option>
@@ -367,7 +396,7 @@ const exportCsv = () => {
                         <th class="px-5 py-3">Fees</th>
                         <th class="px-5 py-3">Status</th>
                         <th class="px-5 py-3">Units</th>
-                        <th class="px-5 py-3 text-right">Actions</th>
+                        <th v-if="hasCourseActions" class="px-5 py-3 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
@@ -381,6 +410,19 @@ const exportCsv = () => {
                                 <span v-for="subcourse in course.subcourses" :key="subcourse.id" class="rounded-md bg-violet-500/10 px-2 py-1 text-[11px] font-medium text-violet-600 dark:text-violet-300">
                                     {{ subcourse.code }} - {{ subcourse.name }}
                                 </span>
+                            </div>
+                            <div v-if="isLecturer && course.teaching_contexts?.length" class="mt-3 space-y-1.5">
+                                <div v-for="context in course.teaching_contexts" :key="context.id" class="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300">
+                                    <p class="font-semibold text-gray-900 dark:text-white">
+                                        {{ context.unit?.code }} - {{ context.unit?.name }}
+                                    </p>
+                                    <p>
+                                        {{ context.class?.code }} - {{ context.class?.name }} |
+                                        {{ context.semester?.name }} |
+                                        {{ context.academic_year?.name }} |
+                                        {{ Number(context.learner_count || 0).toLocaleString() }} learners
+                                    </p>
+                                </div>
                             </div>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ course.department?.name || '-' }}</td>
@@ -404,7 +446,7 @@ const exportCsv = () => {
                                 <span v-if="course.has_units && !course.units.length" class="text-xs text-gray-500">No units</span>
                             </div>
                         </td>
-                        <td class="px-5 py-4 text-right">
+                        <td v-if="hasCourseActions" class="px-5 py-4 text-right">
                             <button v-if="permissions?.canManageCourseScoreLevels" class="mr-2 rounded-md border border-violet-500/30 px-2.5 py-1.5 text-xs text-violet-600 transition hover:border-violet-400 dark:text-violet-300" type="button" @click="openScoreLevelModal(course)">Score Levels</button>
                             <button v-if="permissions?.canEditCourse" class="mr-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 transition hover:border-blue-400 dark:border-[#2a3040] dark:text-blue-300" type="button" @click="editCourse(course)">Edit</button>
                             <button v-if="permissions?.canDeleteCourse" class="rounded-md border border-red-500/30 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400" type="button" @click="destroyCourse(course)">Delete</button>
@@ -420,7 +462,7 @@ const exportCsv = () => {
                     </svg>
                 </div>
                 <p class="mt-4 font-semibold text-gray-700 dark:text-gray-300">No courses found</p>
-                <p class="mt-1 max-w-sm text-sm text-gray-500">Create a course or adjust the filters to see academic records.</p>
+                <p class="mt-1 max-w-sm text-sm text-gray-500">{{ isLearner || isLecturer ? 'No matching courses are available for your account.' : 'Create a course or adjust the filters to see academic records.' }}</p>
                 <button v-if="permissions?.canAddCourse" class="mt-5 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openCourseModal">+ Add Course</button>
             </div>
 
@@ -429,7 +471,7 @@ const exportCsv = () => {
             </div>
         </div>
 
-        <DialogModal :show="showingCourseModal" max-width="2xl" @close="closeCourseModal">
+        <DialogModal :show="showingCourseModal && (permissions?.canAddCourse || permissions?.canEditCourse)" max-width="2xl" @close="closeCourseModal">
             <template #title>{{ courseForm.id ? 'Edit course' : 'Add course' }}</template>
 
             <template #content>
@@ -519,7 +561,7 @@ const exportCsv = () => {
             </template>
         </DialogModal>
 
-        <DialogModal :show="showingUnitModal" max-width="2xl" @close="showingUnitModal = false">
+        <DialogModal :show="showingUnitModal && permissions?.canAddUnit" max-width="2xl" @close="showingUnitModal = false">
             <template #title>Add unit</template>
 
             <template #content>
@@ -629,7 +671,7 @@ const exportCsv = () => {
             </template>
         </DialogModal>
 
-        <DialogModal :show="showingLecturerModal" max-width="2xl" @close="showingLecturerModal = false">
+        <DialogModal :show="showingLecturerModal && permissions?.canAssignLecturer" max-width="2xl" @close="showingLecturerModal = false">
             <template #title>Add lecturer</template>
 
             <template #content>
@@ -684,7 +726,7 @@ const exportCsv = () => {
             </template>
         </DialogModal>
 
-        <DialogModal :show="showingScoreLevelModal" max-width="4xl" @close="closeScoreLevelModal">
+        <DialogModal :show="showingScoreLevelModal && permissions?.canManageCourseScoreLevels" max-width="4xl" @close="closeScoreLevelModal">
             <template #title>Course Score Levels</template>
 
             <template #content>
