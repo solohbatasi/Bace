@@ -134,12 +134,15 @@ const selectedCourse = computed(() => props.courses.find(c => c.id === studentFo
 const subcoursesForSelectedCourse = computed(() => selectedCourse.value?.subcourses || []);
 const selectedSubcourse = computed(() => subcoursesForSelectedCourse.value.find((course) => Number(course.id) === Number(studentForm.subcourse_id)));
 const selectedAcademicTarget = computed(() => selectedSubcourse.value || selectedCourse.value);
-const additionalCourseIds = computed(() => studentForm.additional_courses.map((course) => Number(course.course_id)).filter(Boolean));
-const unavailableAdditionalCourseIds = computed(() => [
-    Number(studentForm.course_id),
+const registrationKey = (courseId, subcourseId = null) => `${Number(courseId || 0)}-${Number(subcourseId || 0)}`;
+const additionalCourseKeys = computed(() => studentForm.additional_courses
+    .map((course) => registrationKey(course.course_id, course.subcourse_id))
+    .filter((key) => key !== '0-0'));
+const unavailableAdditionalCourseKeys = computed(() => [
+    registrationKey(studentForm.course_id, studentForm.subcourse_id),
     ...currentRegisteredCourseIds.value,
-    ...additionalCourseIds.value,
-].filter(Boolean));
+    ...additionalCourseKeys.value,
+].filter((key) => key !== '0-0'));
 
 const selectedClassLabel = computed(() => {
     const cls = props.classes.find(c => c.id === studentForm.class_id);
@@ -177,6 +180,67 @@ const courseFee = (courseId, subcourseId = null) => {
 
 const subcoursesForCourse = (courseId) => props.courses.find((course) => Number(course.id) === Number(courseId))?.subcourses || [];
 const targetCourseIdForUnits = (courseId, subcourseId = null) => subcourseId || courseId;
+const additionalSelectState = () => ({
+    department: { isOpen: false, search: '' },
+    course: { isOpen: false, search: '' },
+    class: { isOpen: false, search: '' },
+    subcourse: { isOpen: false, search: '' },
+});
+const ensureAdditionalSelects = (courseRegistration) => {
+    courseRegistration.selects ||= additionalSelectState();
+    return courseRegistration.selects;
+};
+const matchSearch = (item, search) => {
+    if (!search) return true;
+    const needle = search.toLowerCase();
+
+    return [item.code, item.name].some((value) => String(value || '').toLowerCase().includes(needle));
+};
+const additionalFilteredDepartments = (courseRegistration) => {
+    const search = ensureAdditionalSelects(courseRegistration).department.search;
+
+    return props.departments.filter((department) => matchSearch(department, search));
+};
+const additionalFilteredCourses = (courseRegistration) => {
+    const search = ensureAdditionalSelects(courseRegistration).course.search;
+
+    return coursesForDepartment(courseRegistration.department_id).filter((course) => matchSearch(course, search));
+};
+const additionalFilteredClasses = (courseRegistration) => {
+    const search = ensureAdditionalSelects(courseRegistration).class.search;
+
+    return classesForCourse(courseRegistration.course_id).filter((collegeClass) => matchSearch(collegeClass, search));
+};
+const additionalFilteredSubcourses = (courseRegistration) => {
+    const search = ensureAdditionalSelects(courseRegistration).subcourse.search;
+
+    return subcoursesForCourse(courseRegistration.course_id).filter((subcourse) => matchSearch(subcourse, search));
+};
+const additionalLabel = (items, id, fallback) => {
+    const item = items.find((entry) => Number(entry.id) === Number(id));
+
+    return item ? `${item.code} - ${item.name}` : fallback;
+};
+const additionalDepartmentLabel = (courseRegistration) => additionalLabel(props.departments, courseRegistration.department_id, 'Select department');
+const additionalCourseLabel = (courseRegistration) => additionalLabel(props.courses, courseRegistration.course_id, courseRegistration.department_id ? 'Select course' : 'Select department first');
+const additionalClassLabel = (courseRegistration) => additionalLabel(props.classes, courseRegistration.class_id, courseRegistration.course_id ? 'Select class' : 'Select course first');
+const additionalSubcourseLabel = (courseRegistration) => additionalLabel(subcoursesForCourse(courseRegistration.course_id), courseRegistration.subcourse_id, 'General course');
+const closeAdditionalSelects = (courseRegistration, except = null) => {
+    const selects = ensureAdditionalSelects(courseRegistration);
+
+    Object.keys(selects).forEach((key) => {
+        if (key !== except) selects[key].isOpen = false;
+    });
+};
+const toggleAdditionalSelect = (courseRegistration, key) => {
+    const selects = ensureAdditionalSelects(courseRegistration);
+
+    closeAdditionalSelects(courseRegistration, key);
+    selects[key].isOpen = !selects[key].isOpen;
+    if (selects[key].isOpen) {
+        selects[key].search = '';
+    }
+};
 
 const showingEnrollmentModal = ref(false);
 const deletingStudent = ref(null);
@@ -272,9 +336,27 @@ const editStudent = (student) => {
     studentForm.admitted_on = dateInputValue(student.admitted_on);
     studentForm.status = student.status;
     studentForm.photo_preview = student.photo_path ? `/storage/${student.photo_path}` : null;
-    currentRegisteredCourseIds.value = (student.registered_courses || [])
-        .map((course) => Number(course.id))
-        .filter((courseId) => courseId && courseId !== Number(student.course_id));
+    const registeredCourses = student.registered_courses || [];
+    currentRegisteredCourseIds.value = registeredCourses
+        .filter((course) => !course.primary)
+        .map((course) => registrationKey(course.id, course.subcourse_id));
+    studentForm.additional_courses = registeredCourses
+        .filter((course) => !course.primary)
+        .map((course) => ({
+            department_id: course.department_id || '',
+            course_id: course.id || '',
+            subcourse_id: course.subcourse_id || '',
+            class_id: course.class_id || '',
+            course_fee: course.fee ?? '',
+            units: [...(course.unit_ids || [])],
+            available_units: [],
+            loading_units: false,
+            selects: additionalSelectState(),
+        }));
+
+    studentForm.additional_courses.forEach((courseRegistration) => {
+        fetchAdditionalCourseUnits(courseRegistration, true);
+    });
 
     // Fetch course units for editing
     if (student.course_id) {
@@ -409,6 +491,7 @@ const addAdditionalCourse = () => {
         units: [],
         available_units: [],
         loading_units: false,
+        selects: additionalSelectState(),
     });
 };
 
@@ -437,7 +520,30 @@ const handleAdditionalDepartmentChange = (courseRegistration) => {
     courseRegistration.available_units = [];
 };
 
-const fetchAdditionalCourseUnits = async (courseRegistration) => {
+const selectAdditionalDepartment = (courseRegistration, department) => {
+    courseRegistration.department_id = department.id;
+    handleAdditionalDepartmentChange(courseRegistration);
+    closeAdditionalSelects(courseRegistration);
+};
+
+const selectAdditionalCourse = (courseRegistration, course) => {
+    courseRegistration.course_id = course.id;
+    handleAdditionalCourseChange(courseRegistration);
+    closeAdditionalSelects(courseRegistration);
+};
+
+const selectAdditionalClass = (courseRegistration, collegeClass) => {
+    courseRegistration.class_id = collegeClass.id;
+    closeAdditionalSelects(courseRegistration);
+};
+
+const selectAdditionalSubcourse = (courseRegistration, subcourse) => {
+    courseRegistration.subcourse_id = subcourse?.id || '';
+    handleAdditionalSubcourseChange(courseRegistration);
+    closeAdditionalSelects(courseRegistration);
+};
+
+const fetchAdditionalCourseUnits = async (courseRegistration, preserveSelected = false) => {
     if (!courseRegistration.course_id) {
         courseRegistration.units = [];
         courseRegistration.available_units = [];
@@ -448,7 +554,9 @@ const fetchAdditionalCourseUnits = async (courseRegistration) => {
     try {
         const response = await axios.get(route('api.courses.units', targetCourseIdForUnits(courseRegistration.course_id, courseRegistration.subcourse_id)));
         courseRegistration.available_units = response.data;
-        courseRegistration.units = response.data.map(unit => unit.id);
+        courseRegistration.units = preserveSelected
+            ? (courseRegistration.units || []).filter((unitId) => response.data.some((unit) => Number(unit.id) === Number(unitId)))
+            : response.data.map(unit => unit.id);
     } catch (error) {
         console.error('Error fetching additional course units:', error);
     } finally {
@@ -1017,56 +1125,76 @@ const exportCsv = () => {
                                         + Add Course
                                     </button>
                                 </div>
-                                <div v-if="isEditing && currentRegisteredCourseIds.length" class="mt-3 rounded-md bg-gray-50 p-3 text-xs text-gray-500 dark:bg-[#151a25]">
-                                    <p class="font-semibold uppercase tracking-wider text-gray-500">Already registered</p>
-                                    <div class="mt-2 flex flex-wrap gap-2">
-                                        <span v-for="course in studentForm.id ? students.data.find((item) => item.id === studentForm.id)?.registered_courses || [] : []" :key="course.id" class="rounded-md border border-gray-200 px-2 py-1 dark:border-[#2a3040]">
-                                            {{ course.code }} - {{ course.name }}
-                                        </span>
-                                    </div>
-                                </div>
                                 <div v-if="studentForm.additional_courses.length" class="mt-3 space-y-3">
                                     <div v-for="(courseRegistration, index) in studentForm.additional_courses" :key="index" class="grid gap-3 rounded-md bg-gray-50 p-3 md:grid-cols-5 dark:bg-[#151a25]">
-                                        <div>
+                                        <div class="relative">
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Department</label>
-                                            <select v-model="courseRegistration.department_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" required @change="handleAdditionalDepartmentChange(courseRegistration)">
-                                                <option value="">Select department</option>
-                                                <option v-for="department in departments" :key="department.id" :value="department.id">
-                                                    {{ department.code }} - {{ department.name }}
-                                                </option>
-                                            </select>
+                                            <button type="button" class="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-left text-sm text-gray-900 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" @click="toggleAdditionalSelect(courseRegistration, 'department')">
+                                                <span class="truncate">{{ additionalDepartmentLabel(courseRegistration) }}</span>
+                                                <span class="text-xs text-gray-400">v</span>
+                                            </button>
+                                            <div v-if="ensureAdditionalSelects(courseRegistration).department.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                                <input v-model="ensureAdditionalSelects(courseRegistration).department.search" type="text" class="sticky top-0 w-full border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none dark:border-[#2a3040] dark:bg-[#1a1f2b] dark:text-white" placeholder="Search department..." @click.stop>
+                                                <button v-for="department in additionalFilteredDepartments(courseRegistration)" :key="department.id" type="button" class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-[#2a3040]" @click="selectAdditionalDepartment(courseRegistration, department)">
+                                                    <span class="font-medium">{{ department.code }}</span>
+                                                    <span class="text-gray-500"> - {{ department.name }}</span>
+                                                </button>
+                                                <div v-if="!additionalFilteredDepartments(courseRegistration).length" class="px-3 py-2 text-sm text-gray-500">No departments found</div>
+                                            </div>
                                         </div>
-                                        <div>
+                                        <div class="relative">
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course</label>
-                                            <select v-model="courseRegistration.course_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.department_id" required @change="handleAdditionalCourseChange(courseRegistration)">
-                                                <option value="">{{ courseRegistration.department_id ? 'Select course' : 'Select department first' }}</option>
-                                                <option
-                                                    v-for="course in coursesForDepartment(courseRegistration.department_id)"
+                                            <button type="button" class="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-left text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.department_id" @click="toggleAdditionalSelect(courseRegistration, 'course')">
+                                                <span class="truncate">{{ additionalCourseLabel(courseRegistration) }}</span>
+                                                <span class="text-xs text-gray-400">v</span>
+                                            </button>
+                                            <div v-if="ensureAdditionalSelects(courseRegistration).course.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                                <input v-model="ensureAdditionalSelects(courseRegistration).course.search" type="text" class="sticky top-0 w-full border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none dark:border-[#2a3040] dark:bg-[#1a1f2b] dark:text-white" placeholder="Search course..." @click.stop>
+                                                <button
+                                                    v-for="course in additionalFilteredCourses(courseRegistration)"
                                                     :key="course.id"
-                                                    :value="course.id"
-                                                    :disabled="unavailableAdditionalCourseIds.includes(Number(course.id)) && Number(course.id) !== Number(courseRegistration.course_id)"
+                                                    type="button"
+                                                    class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-[#2a3040]"
+                                                    :class="Number(courseRegistration.course_id) === Number(course.id) ? 'text-violet-700 dark:text-violet-300' : 'text-gray-700 dark:text-gray-300'"
+                                                    :disabled="unavailableAdditionalCourseKeys.includes(registrationKey(course.id, courseRegistration.subcourse_id)) && registrationKey(course.id, courseRegistration.subcourse_id) !== registrationKey(courseRegistration.course_id, courseRegistration.subcourse_id)"
+                                                    @click="selectAdditionalCourse(courseRegistration, course)"
                                                 >
-                                                    {{ course.code }} - {{ course.name }}
-                                                </option>
-                                            </select>
+                                                    <span class="font-medium">{{ course.code }}</span>
+                                                    <span class="text-gray-500"> - {{ course.name }}</span>
+                                                </button>
+                                                <div v-if="!additionalFilteredCourses(courseRegistration).length" class="px-3 py-2 text-sm text-gray-500">No courses found</div>
+                                            </div>
                                         </div>
-                                        <div>
+                                        <div class="relative">
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Class</label>
-                                            <select v-model="courseRegistration.class_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.course_id" required>
-                                                <option value="">{{ courseRegistration.course_id ? 'Select class' : 'Select course first' }}</option>
-                                                <option v-for="cls in classesForCourse(courseRegistration.course_id)" :key="cls.id" :value="cls.id">
-                                                    {{ cls.code }} - {{ cls.name }}
-                                                </option>
-                                            </select>
+                                            <button type="button" class="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-left text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.course_id" @click="toggleAdditionalSelect(courseRegistration, 'class')">
+                                                <span class="truncate">{{ additionalClassLabel(courseRegistration) }}</span>
+                                                <span class="text-xs text-gray-400">v</span>
+                                            </button>
+                                            <div v-if="ensureAdditionalSelects(courseRegistration).class.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                                <input v-model="ensureAdditionalSelects(courseRegistration).class.search" type="text" class="sticky top-0 w-full border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none dark:border-[#2a3040] dark:bg-[#1a1f2b] dark:text-white" placeholder="Search class..." @click.stop>
+                                                <button v-for="cls in additionalFilteredClasses(courseRegistration)" :key="cls.id" type="button" class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-[#2a3040]" @click="selectAdditionalClass(courseRegistration, cls)">
+                                                    <span class="font-medium">{{ cls.code }}</span>
+                                                    <span class="text-gray-500"> - {{ cls.name }}</span>
+                                                </button>
+                                                <div v-if="!additionalFilteredClasses(courseRegistration).length" class="px-3 py-2 text-sm text-gray-500">No classes found</div>
+                                            </div>
                                         </div>
-                                        <div v-if="subcoursesForCourse(courseRegistration.course_id).length">
+                                        <div v-if="subcoursesForCourse(courseRegistration.course_id).length" class="relative">
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Subcourse</label>
-                                            <select v-model="courseRegistration.subcourse_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.course_id" @change="handleAdditionalSubcourseChange(courseRegistration)">
-                                                <option value="">General course</option>
-                                                <option v-for="subcourse in subcoursesForCourse(courseRegistration.course_id)" :key="subcourse.id" :value="subcourse.id">
-                                                    {{ subcourse.code }} - {{ subcourse.name }}
-                                                </option>
-                                            </select>
+                                            <button type="button" class="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-left text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!courseRegistration.course_id" @click="toggleAdditionalSelect(courseRegistration, 'subcourse')">
+                                                <span class="truncate">{{ additionalSubcourseLabel(courseRegistration) }}</span>
+                                                <span class="text-xs text-gray-400">v</span>
+                                            </button>
+                                            <div v-if="ensureAdditionalSelects(courseRegistration).subcourse.isOpen" class="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#2a3040] dark:bg-[#1a1f2b]">
+                                                <input v-model="ensureAdditionalSelects(courseRegistration).subcourse.search" type="text" class="sticky top-0 w-full border-b border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none dark:border-[#2a3040] dark:bg-[#1a1f2b] dark:text-white" placeholder="Search subcourse..." @click.stop>
+                                                <button type="button" class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-[#2a3040]" @click="selectAdditionalSubcourse(courseRegistration, null)">General course</button>
+                                                <button v-for="subcourse in additionalFilteredSubcourses(courseRegistration)" :key="subcourse.id" type="button" class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-[#2a3040]" @click="selectAdditionalSubcourse(courseRegistration, subcourse)">
+                                                    <span class="font-medium">{{ subcourse.code }}</span>
+                                                    <span class="text-gray-500"> - {{ subcourse.name }}</span>
+                                                </button>
+                                                <div v-if="!additionalFilteredSubcourses(courseRegistration).length" class="px-3 py-2 text-sm text-gray-500">No subcourses found</div>
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course Amount</label>

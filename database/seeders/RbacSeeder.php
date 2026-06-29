@@ -131,6 +131,11 @@ class RbacSeeder extends Seeder
                 'payments.add',
                 'payments.edit',
                 'payments.delete',
+                'tickets.view',
+                'tickets.add',
+                'tickets.edit',
+                'tickets.delete',
+                'tickets.manage',
                 'finance.view',
                 'finance.manage',
             ])->pluck('id')
@@ -145,11 +150,12 @@ class RbacSeeder extends Seeder
                 'assignments.edit',
                 'assignments.delete',
                 'assignments.manage',
+                'tickets.view',
                 'attendance.manage',
             ])->pluck('id')
         );
         $student->permissions()->syncWithoutDetaching(
-            $permissions->whereIn('name', ['students.view'])->pluck('id')
+            $permissions->whereIn('name', ['students.view', 'tickets.view', 'tickets.add'])->pluck('id')
         );
         $support->permissions()->syncWithoutDetaching(
             $permissions->whereIn('name', ['users.view', 'health.view'])->pluck('id')

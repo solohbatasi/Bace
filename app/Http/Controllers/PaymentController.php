@@ -30,17 +30,22 @@ class PaymentController extends Controller
             'paymentDate' => now()->toDateString(),
             'students' => Student::query()
                 ->with([
-                    'course:id,code,name,fees',
-                    'enrollments.unit.course:id,code,name,fees',
-                    'semesterRegistrations:id,student_id,class_id,course_id,course_fee',
-                    'semesterRegistrations.course:id,code,name,fees',
+                    'course:id,parent_course_id,code,name,fees',
+                    'subcourse:id,parent_course_id,code,name,fees',
+                    'enrollments:id,student_id,course_id,subcourse_id,unit_id',
+                    'enrollments.unit.course:id,parent_course_id,code,name,fees',
+                    'enrollments.course:id,parent_course_id,code,name,fees',
+                    'enrollments.subcourse:id,parent_course_id,code,name,fees',
+                    'semesterRegistrations:id,student_id,class_id,course_id,subcourse_id,course_fee',
+                    'semesterRegistrations.course:id,parent_course_id,code,name,fees',
+                    'semesterRegistrations.subcourse:id,parent_course_id,code,name,fees',
                     'payments:id,student_id,course_id,amount,status',
                 ])
                 ->orderBy('admission_number')
-                ->get(['id', 'admission_number', 'first_name', 'last_name', 'course_id', 'course_fee'])
+                ->get(['id', 'admission_number', 'first_name', 'last_name', 'course_id', 'subcourse_id', 'course_fee'])
                 ->map(fn (Student $student) => $this->studentOption($student)),
             'payments' => Payment::query()
-                ->with(['student:id,admission_number,first_name,last_name', 'course:id,code,name,fees'])
+                ->with(['student:id,admission_number,first_name,last_name', 'course:id,parent_course_id,code,name,fees'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                     ->where('payment_reference', 'like', "%{$search}%")
                     ->orWhere('external_transaction_id', 'like', "%{$search}%")
@@ -122,30 +127,7 @@ class PaymentController extends Controller
             ->groupBy('course_id')
             ->map(fn (Collection $payments) => (float) $payments->sum('amount'));
 
-        $courses = collect([$student->course])
-            ->merge($student->enrollments->pluck('unit.course'))
-            ->merge($student->semesterRegistrations->pluck('course'))
-            ->filter()
-            ->unique('id')
-            ->values()
-            ->map(function ($course) use ($paidByCourse, $student) {
-                $registration = $student->semesterRegistrations
-                    ->first(fn ($registration) => (int) $registration->course_id === (int) $course->id);
-                $fees = match (true) {
-                    (int) $course->id === (int) $student->course_id && $student->course_fee !== null => (float) $student->course_fee,
-                    $registration?->course_fee !== null => (float) $registration->course_fee,
-                    default => (float) $course->fees,
-                };
-
-                return [
-                    'id' => $course->id,
-                    'code' => $course->code,
-                    'name' => $course->name,
-                    'fees' => $fees,
-                    'paid' => (float) ($paidByCourse[$course->id] ?? 0),
-                    'balance' => max($fees - (float) ($paidByCourse[$course->id] ?? 0), 0),
-                ];
-            });
+        $courses = $this->studentPaymentTargets($student, $paidByCourse);
 
         return [
             'id' => $student->id,
@@ -157,12 +139,89 @@ class PaymentController extends Controller
 
     private function studentCourseIds(Student $student): Collection
     {
-        return collect([$student->course_id])
-            ->merge($student->enrollments->pluck('unit.course_id'))
-            ->merge($student->semesterRegistrations->pluck('course_id'))
-            ->filter()
-            ->unique()
-            ->values();
+        return $this->studentPaymentTargets($student, collect())->pluck('id');
+    }
+
+    private function studentPaymentTargets(Student $student, Collection $paidByCourse): Collection
+    {
+        $targets = collect();
+
+        if ($student->course || $student->subcourse) {
+            $target = $student->subcourse ?: $student->course;
+            $fees = $student->course_fee !== null ? (float) $student->course_fee : (float) ($target?->fees ?? 0);
+
+            $targets->push([
+                'id' => $target?->id,
+                'code' => $target?->code,
+                'name' => $target?->name,
+                'parent_course_id' => $target?->parent_course_id,
+                'type' => $student->subcourse ? 'subcourse' : 'course',
+                'parent_course' => $student->subcourse ? [
+                    'id' => $student->course?->id,
+                    'code' => $student->course?->code,
+                    'name' => $student->course?->name,
+                ] : null,
+                'fees' => $fees,
+            ]);
+        }
+
+        $student->semesterRegistrations->each(function ($registration) use ($targets): void {
+            $target = $registration->subcourse ?: $registration->course;
+
+            if (! $target) {
+                return;
+            }
+
+            $targets->push([
+                'id' => $target->id,
+                'code' => $target->code,
+                'name' => $target->name,
+                'parent_course_id' => $target->parent_course_id,
+                'type' => $registration->subcourse ? 'subcourse' : 'course',
+                'parent_course' => $registration->subcourse ? [
+                    'id' => $registration->course?->id,
+                    'code' => $registration->course?->code,
+                    'name' => $registration->course?->name,
+                ] : null,
+                'fees' => $registration->course_fee !== null ? (float) $registration->course_fee : (float) ($target->fees ?? 0),
+            ]);
+        });
+
+        $student->enrollments->each(function ($enrollment) use ($targets): void {
+            $target = $enrollment->subcourse ?: $enrollment->unit?->course ?: $enrollment->course;
+
+            if (! $target) {
+                return;
+            }
+
+            $targets->push([
+                'id' => $target->id,
+                'code' => $target->code,
+                'name' => $target->name,
+                'parent_course_id' => $target->parent_course_id,
+                'type' => $target->parent_course_id ? 'subcourse' : 'course',
+                'parent_course' => $target->parent_course_id ? [
+                    'id' => $enrollment->course?->id,
+                    'code' => $enrollment->course?->code,
+                    'name' => $enrollment->course?->name,
+                ] : null,
+                'fees' => (float) ($target->fees ?? 0),
+            ]);
+        });
+
+        return $targets
+            ->filter(fn (array $target) => $target['id'])
+            ->unique('id')
+            ->values()
+            ->map(function (array $target) use ($paidByCourse) {
+                $paid = (float) ($paidByCourse[$target['id']] ?? 0);
+
+                return [
+                    ...$target,
+                    'paid' => $paid,
+                    'balance' => max((float) $target['fees'] - $paid, 0),
+                ];
+            });
     }
 
     private function paymentData(Request $request, ?Payment $payment = null): array
@@ -179,7 +238,17 @@ class PaymentController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
-        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations:id,student_id,course_id'])->findOrFail($data['student_id']);
+        $student = Student::with([
+            'course:id,parent_course_id,code,name,fees',
+            'subcourse:id,parent_course_id,code,name,fees',
+            'enrollments:id,student_id,course_id,subcourse_id,unit_id',
+            'enrollments.unit.course:id,parent_course_id,code,name,fees',
+            'enrollments.course:id,parent_course_id,code,name,fees',
+            'enrollments.subcourse:id,parent_course_id,code,name,fees',
+            'semesterRegistrations:id,student_id,course_id,subcourse_id,course_fee',
+            'semesterRegistrations.course:id,parent_course_id,code,name,fees',
+            'semesterRegistrations.subcourse:id,parent_course_id,code,name,fees',
+        ])->findOrFail($data['student_id']);
         if (($data['course_id'] ?? null) && ! $this->studentCourseIds($student)->contains((int) $data['course_id'])) {
             throw ValidationException::withMessages([
                 'course_id' => 'The selected learner is not enrolled in that course.',
@@ -191,7 +260,17 @@ class PaymentController extends Controller
 
     private function paymentAllocations(Request $request, array $data): array
     {
-        $student = Student::with(['course:id', 'enrollments.unit:id,course_id', 'semesterRegistrations:id,student_id,course_id'])->findOrFail($data['student_id']);
+        $student = Student::with([
+            'course:id,parent_course_id,code,name,fees',
+            'subcourse:id,parent_course_id,code,name,fees',
+            'enrollments:id,student_id,course_id,subcourse_id,unit_id',
+            'enrollments.unit.course:id,parent_course_id,code,name,fees',
+            'enrollments.course:id,parent_course_id,code,name,fees',
+            'enrollments.subcourse:id,parent_course_id,code,name,fees',
+            'semesterRegistrations:id,student_id,course_id,subcourse_id,course_fee',
+            'semesterRegistrations.course:id,parent_course_id,code,name,fees',
+            'semesterRegistrations.subcourse:id,parent_course_id,code,name,fees',
+        ])->findOrFail($data['student_id']);
         $allowedCourseIds = $this->studentCourseIds($student);
 
         $hasAllocationRows = collect($request->input('allocations', []))->isNotEmpty();

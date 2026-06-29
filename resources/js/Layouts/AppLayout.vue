@@ -28,6 +28,7 @@ const navigation = computed(() => [
     { name: 'Users', route: 'admin.users.*', href: route('admin.users.index'), icon: 'users', permission: 'users.view' },
     { name: 'Students', route: 'students.*', href: route('students.index'), icon: 'student', permission: 'students.view' },
     { name: 'Payments', route: 'finance.payments.*', href: route('finance.payments.index'), icon: 'payments', permission: 'payments.view|finance.view' },
+    { name: 'Tickets', route: 'finance.tickets.*', href: route('finance.tickets.index'), icon: 'ticket', permission: 'tickets.view|finance.view' },
     { name: 'Academic Settings', route: 'academics.settings.*', href: route('academics.settings.index'), icon: 'calendar', permission: 'academic-settings.view|classes.manage' },
     { name: 'Departments', route: 'academics.departments.*', href: route('academics.departments.index'), icon: 'building', permission: 'departments.view|classes.manage' },
     { name: 'Courses', route: 'academics.courses.*', href: route('academics.courses.index'), icon: 'book', permission: 'courses.view|classes.manage' },
@@ -86,6 +87,7 @@ const logout = () => router.post(route('logout'));
                                 <path v-else-if="item.icon === 'users'" stroke-linecap="round" stroke-linejoin="round" d="M16 19v-1.5A3.5 3.5 0 0 0 12.5 14h-5A3.5 3.5 0 0 0 4 17.5V19m15 0v-1a3 3 0 0 0-2-2.83M13 5.17a3 3 0 0 1 0 5.66M10 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
                                 <path v-else-if="item.icon === 'student'" stroke-linecap="round" stroke-linejoin="round" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0M4 5l8-3 8 3-8 3-8-3Zm3 2v3" />
                                 <path v-else-if="item.icon === 'payments'" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16v10H4V7Zm0 3h16M7 14h4m5 0h1" />
+                                <path v-else-if="item.icon === 'ticket'" stroke-linecap="round" stroke-linejoin="round" d="M5 6h14v4a2 2 0 0 0 0 4v4H5v-4a2 2 0 0 0 0-4V6Zm5 3v6m4-6v6" />
                                 <path v-else-if="item.icon === 'calendar'" stroke-linecap="round" stroke-linejoin="round" d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Zm3 8h3m3 0h3m-9 4h3m3 0h3" />
                                 <path v-else-if="item.icon === 'building'" stroke-linecap="round" stroke-linejoin="round" d="M4 21h16M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M9 8h1m4 0h1M9 12h1m4 0h1M9 16h1m4 0h1" />
                                 <path v-else-if="item.icon === 'book'" stroke-linecap="round" stroke-linejoin="round" d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v16H7.5A2.5 2.5 0 0 0 5 21V5.5Zm0 0A2.5 2.5 0 0 1 7.5 8H20" />

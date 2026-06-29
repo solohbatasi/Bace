@@ -79,6 +79,13 @@ const stats = computed(() => ({
 }));
 
 const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
+const paymentTargetLabel = (course) => {
+    if (!course) return 'Not assigned';
+
+    return course.type === 'subcourse' || course.parent_course_id
+        ? `${course.code} - ${course.name} (Subcourse)`
+        : `${course.code} - ${course.name}`;
+};
 const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -220,7 +227,7 @@ const printReceipt = (payment) => {
 
     const org = organisation.value;
     const studentName = `${payment.student?.first_name || ''} ${payment.student?.last_name || ''}`.trim();
-    const courseName = payment.course ? `${payment.course.code} - ${payment.course.name}` : 'Not assigned';
+    const courseName = payment.course ? paymentTargetLabel(payment.course) : 'Not assigned';
     const courseSummary = paymentCourseSummary(payment);
     const logo = org.logo_url
         ? `<img src="${escapeHtml(org.logo_url)}" alt="${escapeHtml(org.name || 'Logo')}" class="logo">`
@@ -432,11 +439,11 @@ const printReceipt = (payment) => {
 
 const exportCsv = () => {
     const rows = [
-        ['Learner', 'Admission No.', 'Course', 'Reference', 'Method', 'Status', 'Date', 'Amount'],
+        ['Learner', 'Admission No.', 'Payment Target', 'Reference', 'Method', 'Status', 'Date', 'Amount'],
         ...props.payments.data.map((payment) => [
             `${payment.student?.first_name || ''} ${payment.student?.last_name || ''}`.trim(),
             payment.student?.admission_number || '',
-            payment.course ? `${payment.course.code} - ${payment.course.name}` : '',
+            payment.course ? paymentTargetLabel(payment.course) : '',
             payment.payment_reference,
             payment.method,
             payment.status,
@@ -496,8 +503,8 @@ const exportCsv = () => {
                     <option v-for="student in students" :key="student.id" :value="student.id">{{ student.admission_number }} - {{ student.name }}</option>
                 </select>
                 <select v-model="filter.course_id" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300">
-                    <option value="">All courses</option>
-                    <option v-for="course in filterCourses" :key="course.id" :value="course.id">{{ course.code }} - {{ course.name }}</option>
+                    <option value="">All targets</option>
+                    <option v-for="course in filterCourses" :key="course.id" :value="course.id">{{ paymentTargetLabel(course) }}</option>
                 </select>
                 <input v-model="filter.search" class="h-8 rounded-md border-gray-200 bg-white text-xs text-gray-700 placeholder:text-gray-400 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#11141b] dark:text-gray-300 dark:placeholder:text-gray-600" placeholder="Search learner, ref...">
             </div>
@@ -508,7 +515,7 @@ const exportCsv = () => {
                 <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
                     <tr>
                         <th class="px-5 py-3">Learner</th>
-                        <th class="px-5 py-3">Course</th>
+                        <th class="px-5 py-3">Payment Target</th>
                         <th class="px-5 py-3">Reference</th>
                         <th class="px-5 py-3">Method</th>
                         <th class="px-5 py-3">Date</th>
@@ -523,7 +530,10 @@ const exportCsv = () => {
                             <p class="font-semibold text-gray-900 dark:text-white">{{ payment.student?.admission_number }}</p>
                             <p class="text-xs text-gray-500">{{ payment.student?.first_name }} {{ payment.student?.last_name }}</p>
                         </td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ payment.course ? `${payment.course.code} - ${payment.course.name}` : 'Not assigned' }}</td>
+                        <td class="px-5 py-4">
+                            <p class="text-gray-600 dark:text-gray-300">{{ paymentTargetLabel(payment.course) }}</p>
+                            <p v-if="payment.course?.parent_course_id" class="text-xs text-gray-500">Subcourse</p>
+                        </td>
                         <td class="px-5 py-4">
                             <p class="font-medium text-gray-900 dark:text-white">{{ payment.payment_reference }}</p>
                             <p class="text-xs capitalize text-gray-500">{{ payment.status }}</p>
@@ -608,10 +618,10 @@ const exportCsv = () => {
                         <p v-if="paymentForm.errors.student_id" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.student_id }}</p>
                     </div>
                     <div v-if="!canSplitPayment">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Course paid for</label>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Payment target</label>
                         <select v-model="paymentForm.course_id" class="mt-1 w-full rounded-md border-gray-200 bg-white text-sm text-gray-900 focus:border-violet-500 focus:ring-violet-500 disabled:opacity-60 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" :disabled="!selectedStudent" required>
-                            <option value="">{{ selectedStudent ? 'Select course' : 'Select learner first' }}</option>
-                            <option v-for="course in selectedStudent?.courses || []" :key="course.id" :value="course.id">{{ course.code }} - {{ course.name }}</option>
+                            <option value="">{{ selectedStudent ? 'Select payment target' : 'Select learner first' }}</option>
+                            <option v-for="course in selectedStudent?.courses || []" :key="course.id" :value="course.id">{{ paymentTargetLabel(course) }}</option>
                         </select>
                         <p v-if="paymentForm.errors.course_id" class="mt-1 text-xs text-red-400">{{ paymentForm.errors.course_id }}</p>
                     </div>
@@ -637,8 +647,8 @@ const exportCsv = () => {
                     <div v-if="canSplitPayment" class="md:col-span-2 rounded-md border border-gray-200 p-3 dark:border-[#2a3040]">
                         <div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
                             <div>
-                                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Split by Course</h3>
-                                <p class="text-xs text-gray-500">Enter how much of this payment belongs to each course.</p>
+                                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Split by Target</h3>
+                                <p class="text-xs text-gray-500">Enter how much of this payment belongs to each course or subcourse.</p>
                             </div>
                             <div class="text-xs sm:text-right">
                                 <p class="font-semibold text-emerald-500">Allocated {{ money(allocationTotal) }}</p>
@@ -650,7 +660,7 @@ const exportCsv = () => {
                         <div class="mt-3 space-y-2">
                             <div v-for="allocation in paymentForm.allocations" :key="allocation.course_id" class="grid gap-2 rounded-md bg-gray-50 p-3 text-sm md:grid-cols-[1fr_140px_auto] md:items-center dark:bg-[#151a25]">
                                 <div>
-                                    <p class="font-semibold text-gray-800 dark:text-white">{{ splitCourse(allocation)?.name }}</p>
+                                    <p class="font-semibold text-gray-800 dark:text-white">{{ paymentTargetLabel(splitCourse(allocation)) }}</p>
                                     <p class="text-xs text-gray-500">
                                         {{ splitCourse(allocation)?.code }} |
                                         Fee {{ money(splitCourse(allocation)?.fees) }} |

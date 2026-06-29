@@ -8,6 +8,7 @@ class AppPermissions
         'users' => 'Users',
         'students' => 'Students',
         'payments' => 'Payments',
+        'tickets' => 'Lesson Tickets',
         'academic-settings' => 'Academic Settings',
         'academic-years' => 'Academic Years',
         'semesters' => 'Semesters',
