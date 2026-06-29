@@ -73,10 +73,11 @@ Route::middleware([
         Route::put('payments/{payment}', [PaymentController::class, 'update'])->name('payments.update')->middleware('permission:payments.edit|finance.manage');
         Route::delete('payments/{payment}', [PaymentController::class, 'destroy'])->name('payments.destroy')->middleware('permission:payments.delete|finance.manage');
         Route::get('tickets', [LessonTicketController::class, 'index'])->name('tickets.index')->middleware('permission:tickets.view|finance.view');
-        Route::post('tickets/rules', [LessonTicketController::class, 'storeRule'])->name('tickets.rules.store')->middleware('permission:tickets.add|finance.manage');
-        Route::put('tickets/rules/{rule}', [LessonTicketController::class, 'updateRule'])->name('tickets.rules.update')->middleware('permission:tickets.edit|finance.manage');
-        Route::delete('tickets/rules/{rule}', [LessonTicketController::class, 'destroyRule'])->name('tickets.rules.destroy')->middleware('permission:tickets.delete|finance.manage');
+        Route::post('tickets/rules', [LessonTicketController::class, 'storeRule'])->name('tickets.rules.store')->middleware('permission:tickets.manage|finance.manage');
+        Route::put('tickets/rules/{rule}', [LessonTicketController::class, 'updateRule'])->name('tickets.rules.update')->middleware('permission:tickets.manage|finance.manage');
+        Route::delete('tickets/rules/{rule}', [LessonTicketController::class, 'destroyRule'])->name('tickets.rules.destroy')->middleware('permission:tickets.manage|finance.manage');
         Route::post('tickets/issue', [LessonTicketController::class, 'issue'])->name('tickets.issue')->middleware('permission:tickets.add|finance.manage');
+        Route::post('tickets/check-in', [LessonTicketController::class, 'checkIn'])->name('tickets.check-in')->middleware('permission:tickets.manage|attendance.manage|lecturers.manage|finance.manage');
         Route::get('tickets/{ticket}/download', [LessonTicketController::class, 'download'])->name('tickets.download')->middleware('permission:tickets.view|finance.view');
         Route::get('tickets/{ticket}/verify', [LessonTicketController::class, 'verify'])->name('tickets.verify')->middleware('permission:tickets.view|finance.view');
     });

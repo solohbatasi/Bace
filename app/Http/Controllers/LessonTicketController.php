@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\OrganisationSetting;
 use App\Models\Course;
 use App\Models\LessonTicket;
+use App\Models\LessonTicketCheckin;
 use App\Models\LessonTicketRule;
 use App\Models\Student;
 use App\Models\Unit;
@@ -27,9 +28,13 @@ class LessonTicketController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasAnyPermission('tickets.view|finance.view'), 403);
+        abort_unless($request->user()->hasAnyPermission('tickets.view|finance.view|lecturers.manage'), 403);
 
         $filters = $request->only(['search', 'course_id', 'student_id', 'status']);
+        $user = $request->user()->loadMissing('student', 'lecturer');
+        $isLearner = (bool) $user->student && ! $user->hasAnyPermission('tickets.manage|finance.manage');
+        $canManageRules = $user->hasAnyPermission('tickets.manage|finance.manage');
+        $canCheckIn = $user->hasAnyPermission('tickets.manage|attendance.manage|lecturers.manage|finance.manage');
 
         $rules = LessonTicketRule::query()
             ->with(['course:id,parent_course_id,code,name,fees', 'course.parentCourse:id,code,name', 'unit:id,course_id,code,name'])
@@ -55,6 +60,7 @@ class LessonTicketController extends Controller
                 'student:id,admission_number,first_name,last_name',
                 'course:id,code,name',
                 'unit:id,course_id,code,name',
+                'checkins:id,lesson_ticket_id,checked_in_at,checked_in_by',
             ])
             ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(fn ($query) => $query
                 ->where('ticket_number', 'like', "%{$search}%")
@@ -66,7 +72,8 @@ class LessonTicketController extends Controller
                     ->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%"))))
             ->when($filters['course_id'] ?? null, fn ($query, $courseId) => $query->where('course_id', $courseId))
-            ->when($filters['student_id'] ?? null, fn ($query, $studentId) => $query->where('student_id', $studentId))
+            ->when($isLearner, fn ($query) => $query->where('student_id', $user->student->id))
+            ->when(! $isLearner && ($filters['student_id'] ?? null), fn ($query, $studentId) => $query->where('student_id', $studentId))
             ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->latest('issued_on')
             ->latest()
@@ -78,6 +85,10 @@ class LessonTicketController extends Controller
             'canAdd' => $request->user()->hasAnyPermission('tickets.add|finance.manage'),
             'canEdit' => $request->user()->hasAnyPermission('tickets.edit|finance.manage'),
             'canDelete' => $request->user()->hasAnyPermission('tickets.delete|finance.manage'),
+            'canManageRules' => $canManageRules,
+            'canCheckIn' => $canCheckIn,
+            'isLearner' => $isLearner,
+            'authStudentId' => $user->student?->id,
             'filters' => $filters,
             'ticketDate' => now()->toDateString(),
             'courses' => Course::query()
@@ -102,6 +113,7 @@ class LessonTicketController extends Controller
                     'payments:id,student_id,course_id,amount,status',
                 ])
                 ->orderBy('admission_number')
+                ->when($isLearner, fn ($query) => $query->whereKey($user->student->id))
                 ->get(['id', 'admission_number', 'first_name', 'last_name', 'course_id', 'subcourse_id', 'course_fee'])
                 ->map(fn (Student $student) => $this->studentOption($student, $this->activeRules())),
             'rules' => $rules,
@@ -114,15 +126,17 @@ class LessonTicketController extends Controller
             'tickets' => $tickets,
             'summary' => [
                 'active_rules' => LessonTicketRule::where('is_active', true)->count(),
-                'issued_tickets' => LessonTicket::count(),
-                'downloaded_tickets' => LessonTicket::whereNotNull('downloaded_at')->count(),
+                'issued_tickets' => LessonTicket::when($isLearner, fn ($query) => $query->where('student_id', $user->student->id))->count(),
+                'downloaded_tickets' => LessonTicket::when($isLearner, fn ($query) => $query->where('student_id', $user->student->id))->whereNotNull('downloaded_at')->count(),
+                'checked_in_today' => LessonTicketCheckin::whereDate('checked_in_at', now()->toDateString())->count(),
             ],
+            'recentCheckins' => $this->recentCheckins(),
         ]);
     }
 
     public function storeRule(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasAnyPermission('tickets.add|finance.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('tickets.manage|finance.manage'), 403);
 
         LessonTicketRule::create($this->ruleData($request) + [
             'created_by' => $request->user()->id,
@@ -134,7 +148,7 @@ class LessonTicketController extends Controller
 
     public function updateRule(Request $request, LessonTicketRule $rule): RedirectResponse
     {
-        abort_unless($request->user()->hasAnyPermission('tickets.edit|finance.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('tickets.manage|finance.manage'), 403);
 
         $rule->update($this->ruleData($request) + ['updated_by' => $request->user()->id]);
 
@@ -143,7 +157,7 @@ class LessonTicketController extends Controller
 
     public function destroyRule(Request $request, LessonTicketRule $rule): RedirectResponse
     {
-        abort_unless($request->user()->hasAnyPermission('tickets.delete|finance.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('tickets.manage|finance.manage'), 403);
 
         $rule->forceFill(['deleted_by' => $request->user()->id])->save();
         $rule->delete();
@@ -156,11 +170,20 @@ class LessonTicketController extends Controller
         abort_unless($request->user()->hasAnyPermission('tickets.add|finance.manage'), 403);
 
         $data = $request->validate([
-            'student_id' => ['required', 'exists:students,id'],
+            'student_id' => ['nullable', 'exists:students,id'],
             'target_key' => ['nullable', 'string', 'max:80'],
             'issued_on' => ['required', 'date'],
             'notes' => ['nullable', 'string'],
         ]);
+        $user = $request->user()->loadMissing('student');
+        $isLearner = (bool) $user->student && ! $user->hasAnyPermission('tickets.manage|finance.manage');
+        $studentId = $isLearner ? $user->student->id : ($data['student_id'] ?? null);
+
+        if (! $studentId) {
+            throw ValidationException::withMessages([
+                'student_id' => 'Select the learner this ticket belongs to.',
+            ]);
+        }
 
         $student = Student::with([
             'course:id,parent_course_id,code,name,fees',
@@ -171,7 +194,7 @@ class LessonTicketController extends Controller
             'semesterRegistrations.course:id,parent_course_id,code,name,fees',
             'semesterRegistrations.subcourse:id,parent_course_id,code,name,fees',
             'payments:id,student_id,course_id,amount,status',
-        ])->findOrFail($data['student_id']);
+        ])->findOrFail($studentId);
 
         $targets = collect($this->studentOption($student, $this->activeRules())['ticket_targets']);
         $target = $this->issueTarget($targets, $data['target_key'] ?? null);
@@ -229,6 +252,7 @@ class LessonTicketController extends Controller
     public function download(Request $request, LessonTicket $ticket): HttpResponse
     {
         abort_unless($request->user()->hasAnyPermission('tickets.view|finance.view'), 403);
+        abort_unless($this->canUseTicket($request, $ticket), 403);
 
         $ticket = $this->loadedTicket($ticket);
 
@@ -248,6 +272,7 @@ class LessonTicketController extends Controller
     public function verify(Request $request, LessonTicket $ticket): HttpResponse
     {
         abort_unless($request->user()->hasAnyPermission('tickets.view|finance.view'), 403);
+        abort_unless($this->canUseTicket($request, $ticket), 403);
 
         if (! hash_equals((string) $ticket->verification_token, (string) $request->query('token'))) {
             abort(404);
@@ -255,6 +280,56 @@ class LessonTicketController extends Controller
 
         return response($this->verificationHtml($this->loadedTicket($ticket)))
             ->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    public function checkIn(Request $request): \Illuminate\Http\JsonResponse
+    {
+        abort_unless($request->user()->hasAnyPermission('tickets.manage|attendance.manage|lecturers.manage|finance.manage'), 403);
+
+        $data = $request->validate([
+            'scan' => ['required', 'string', 'max:2048'],
+        ]);
+
+        $ticket = $this->ticketFromScan($data['scan']);
+
+        if (! $ticket) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Ticket not found.',
+            ], 404);
+        }
+
+        $ticket = $this->loadedTicket($ticket);
+        $existing = $ticket->checkins()->latest('checked_in_at')->first();
+
+        if ($existing) {
+            return response()->json([
+                'ok' => true,
+                'duplicate' => true,
+                'message' => 'Already checked in.',
+                'ticket' => $this->scanPayload($ticket, $existing),
+                'recentCheckins' => $this->recentCheckins(),
+            ]);
+        }
+
+        $checkin = $ticket->checkins()->create([
+            'checked_in_by' => $request->user()->id,
+            'checked_in_at' => now(),
+            'status' => 'checked_in',
+        ]);
+
+        $ticket->forceFill([
+            'status' => 'checked_in',
+            'updated_by' => $request->user()->id,
+        ])->save();
+
+        return response()->json([
+            'ok' => true,
+            'duplicate' => false,
+            'message' => 'Checked in.',
+            'ticket' => $this->scanPayload($ticket->refresh()->load(['student:id,admission_number,first_name,last_name', 'course:id,code,name', 'unit:id,course_id,code,name']), $checkin),
+            'recentCheckins' => $this->recentCheckins(),
+        ]);
     }
 
     private function ruleData(Request $request): array
@@ -336,6 +411,7 @@ class LessonTicketController extends Controller
             'amount_paid' => $ticket->amount_paid,
             'issued_on' => $ticket->issued_on,
             'downloaded_at' => $ticket->downloaded_at,
+            'checked_in_at' => $ticket->checkins->sortByDesc('checked_in_at')->first()?->checked_in_at,
             'status' => $ticket->status,
             'verification_url' => $this->verificationUrl($ticket),
         ];
@@ -510,7 +586,79 @@ class LessonTicketController extends Controller
             'student:id,admission_number,first_name,last_name',
             'course:id,code,name',
             'unit:id,course_id,code,name',
+            'checkins:id,lesson_ticket_id,checked_in_at,checked_in_by',
         ]);
+    }
+
+    private function canUseTicket(Request $request, LessonTicket $ticket): bool
+    {
+        $user = $request->user()->loadMissing('student');
+
+        if ($user->hasAnyPermission('tickets.manage|attendance.manage|finance.manage|lecturers.manage')) {
+            return true;
+        }
+
+        return $user->student && (int) $ticket->student_id === (int) $user->student->id;
+    }
+
+    private function ticketFromScan(string $scan): ?LessonTicket
+    {
+        $scan = trim($scan);
+        $token = null;
+        $ticketId = null;
+
+        if (filter_var($scan, FILTER_VALIDATE_URL)) {
+            $parts = parse_url($scan);
+            parse_str($parts['query'] ?? '', $query);
+            $token = $query['token'] ?? null;
+
+            if (preg_match('~/tickets/(\d+)/(?:verify|download)~', $parts['path'] ?? '', $matches)) {
+                $ticketId = (int) $matches[1];
+            }
+        }
+
+        $query = LessonTicket::query();
+
+        if ($ticketId && $token) {
+            return $query->whereKey($ticketId)->where('verification_token', $token)->first();
+        }
+
+        return LessonTicket::where('verification_token', $scan)
+            ->orWhere('ticket_number', $scan)
+            ->first();
+    }
+
+    private function scanPayload(LessonTicket $ticket, ?LessonTicketCheckin $checkin = null): array
+    {
+        return [
+            'id' => $ticket->id,
+            'ticket_number' => $ticket->ticket_number,
+            'student' => [
+                'admission_number' => $ticket->student?->admission_number,
+                'name' => trim(($ticket->student?->first_name ?: '').' '.($ticket->student?->last_name ?: '')),
+            ],
+            'target_label' => $this->ticketTargetLabel($ticket),
+            'session_type' => $ticket->session_type,
+            'lesson_count' => $ticket->lesson_count,
+            'status' => $ticket->status,
+            'checked_in_at' => $checkin?->checked_in_at?->toDateTimeString(),
+        ];
+    }
+
+    private function recentCheckins(): array
+    {
+        return LessonTicketCheckin::query()
+            ->with([
+                'ticket:id,ticket_number,student_id,course_id,unit_id,target_type,session_type,lesson_count,status',
+                'ticket.student:id,admission_number,first_name,last_name',
+                'ticket.course:id,code,name',
+                'ticket.unit:id,course_id,code,name',
+            ])
+            ->latest('checked_in_at')
+            ->limit(12)
+            ->get()
+            ->map(fn (LessonTicketCheckin $checkin) => $this->scanPayload($checkin->ticket, $checkin))
+            ->all();
     }
 
     private function verificationUrl(LessonTicket $ticket): string

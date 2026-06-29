@@ -1,6 +1,7 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ConfirmationModal from '@/Components/ConfirmationModal.vue';
 import DialogModal from '@/Components/DialogModal.vue';
@@ -10,6 +11,10 @@ const props = defineProps({
     canAdd: Boolean,
     canEdit: Boolean,
     canDelete: Boolean,
+    canManageRules: Boolean,
+    canCheckIn: Boolean,
+    isLearner: Boolean,
+    authStudentId: Number,
     filters: Object,
     ticketDate: String,
     courses: Array,
@@ -19,6 +24,7 @@ const props = defineProps({
     ticketRules: Array,
     tickets: Object,
     summary: Object,
+    recentCheckins: Array,
 });
 
 const filter = reactive({
@@ -44,7 +50,7 @@ const ruleForm = useForm({
 });
 
 const ticketForm = useForm({
-    student_id: '',
+    student_id: props.authStudentId || '',
     target_key: '',
     issued_on: props.ticketDate,
     notes: '',
@@ -54,8 +60,26 @@ const showingRuleModal = ref(false);
 const showingTicketModal = ref(false);
 const deletingRule = ref(null);
 const activeTab = ref('tickets');
+const scanInput = ref(null);
+const cameraVideo = ref(null);
+const recentCheckins = ref(props.recentCheckins || []);
+const scan = reactive({
+    value: '',
+    processing: false,
+    result: null,
+});
+const camera = reactive({
+    active: false,
+    starting: false,
+    error: '',
+});
 const courseSelect = reactive({ isOpen: false, search: '' });
 const studentSelect = reactive({ isOpen: false, search: '' });
+let cameraStream = null;
+let cameraFrame = null;
+let qrDetector = null;
+let lastCameraScan = '';
+let lastCameraScanAt = 0;
 
 const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
 const sentence = (value) => String(value || '').replaceAll('_', ' ');
@@ -97,12 +121,17 @@ const stats = computed(() => [
     { label: 'Active Rules', value: props.summary.active_rules },
     { label: 'Issued Tickets', value: props.summary.issued_tickets },
     { label: 'Downloaded', value: props.summary.downloaded_tickets },
+    { label: 'Checked In Today', value: props.summary.checked_in_today },
 ]);
 
 watch(filter, () => router.get(route('finance.tickets.index'), filter, { preserveState: true, replace: true }), { deep: true });
 
 watch(() => ticketForm.student_id, () => {
     ticketForm.target_key = studentTargets.value.length === 1 ? studentTargets.value[0].key : '';
+});
+
+watch(activeTab, (tab) => {
+    if (tab !== 'checkin') stopCamera();
 });
 
 const resetRuleForm = () => {
@@ -157,7 +186,7 @@ const saveRule = () => {
 
 const resetTicketForm = () => {
     ticketForm.clearErrors();
-    ticketForm.student_id = '';
+    ticketForm.student_id = props.authStudentId || '';
     ticketForm.target_key = '';
     ticketForm.issued_on = props.ticketDate;
     ticketForm.notes = '';
@@ -167,6 +196,10 @@ const resetTicketForm = () => {
 
 const openTicketModal = () => {
     resetTicketForm();
+    if (props.authStudentId) {
+        ticketForm.student_id = props.authStudentId;
+        ticketForm.target_key = studentTargets.value.length === 1 ? studentTargets.value[0].key : '';
+    }
     showingTicketModal.value = true;
 };
 
@@ -234,6 +267,105 @@ const confirmDeleteRule = () => {
         onSuccess: closeDeleteRuleModal,
     });
 };
+
+const focusScanner = () => {
+    requestAnimationFrame(() => scanInput.value?.focus());
+};
+
+const checkInTicket = async (fromCamera = false) => {
+    if (!scan.value || scan.processing) return;
+
+    scan.processing = true;
+    scan.result = null;
+
+    try {
+        const response = await axios.post(route('finance.tickets.check-in'), { scan: scan.value });
+        scan.result = response.data;
+        recentCheckins.value = response.data.recentCheckins || recentCheckins.value;
+    } catch (error) {
+        scan.result = error.response?.data || { ok: false, message: 'Check-in failed.' };
+    } finally {
+        scan.value = '';
+        scan.processing = false;
+        if (!fromCamera) focusScanner();
+    }
+};
+
+const stopCamera = () => {
+    if (cameraFrame) cancelAnimationFrame(cameraFrame);
+    cameraFrame = null;
+
+    if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        cameraStream = null;
+    }
+
+    if (cameraVideo.value) cameraVideo.value.srcObject = null;
+    camera.active = false;
+    camera.starting = false;
+};
+
+const scanCameraFrame = async () => {
+    if (!camera.active || !cameraVideo.value || !qrDetector) return;
+
+    try {
+        if (cameraVideo.value.readyState >= 2 && !scan.processing) {
+            const codes = await qrDetector.detect(cameraVideo.value);
+            const value = codes[0]?.rawValue;
+            const now = Date.now();
+
+            if (value && (value !== lastCameraScan || now - lastCameraScanAt > 3000)) {
+                lastCameraScan = value;
+                lastCameraScanAt = now;
+                scan.value = value;
+                await checkInTicket(true);
+            }
+        }
+    } catch (error) {
+        camera.error = 'Camera scanner could not read this frame.';
+    }
+
+    cameraFrame = requestAnimationFrame(scanCameraFrame);
+};
+
+const startCamera = async () => {
+    camera.error = '';
+
+    if (!('BarcodeDetector' in window)) {
+        camera.error = 'Camera QR scanning is not supported by this browser. Use Chrome or Edge, or use the scan input.';
+        focusScanner();
+        return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+        camera.error = 'Camera access is not available in this browser.';
+        focusScanner();
+        return;
+    }
+
+    camera.starting = true;
+
+    try {
+        qrDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false,
+        });
+        cameraVideo.value.srcObject = cameraStream;
+        await cameraVideo.value.play();
+        camera.active = true;
+        scanCameraFrame();
+    } catch (error) {
+        stopCamera();
+        camera.error = error?.name === 'NotAllowedError'
+            ? 'Camera permission was denied.'
+            : 'Could not start the camera scanner.';
+    } finally {
+        camera.starting = false;
+    }
+};
+
+onBeforeUnmount(stopCamera);
 </script>
 
 <template>
@@ -244,18 +376,18 @@ const confirmDeleteRule = () => {
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Lesson Tickets</h1>
             </div>
             <div class="flex flex-wrap gap-2">
-                <button v-if="canAdd" class="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm font-semibold text-gray-600 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-300" type="button" @click="openRuleModal">
+                <button v-if="canManageRules" class="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm font-semibold text-gray-600 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-300" type="button" @click="openRuleModal">
                     <span class="text-base leading-none">+</span>
                     Rule
                 </button>
                 <button v-if="canAdd" class="inline-flex h-9 items-center gap-2 rounded-md bg-violet-500 px-3 text-sm font-semibold text-white transition hover:bg-violet-400" type="button" @click="openTicketModal">
                     <span class="text-base leading-none">+</span>
-                    Ticket
+                    {{ isLearner ? 'Generate Ticket' : 'Ticket' }}
                 </button>
             </div>
         </div>
 
-        <div class="mt-4 grid gap-3 md:grid-cols-3">
+        <div class="mt-4 grid gap-3 md:grid-cols-4">
             <div v-for="item in stats" :key="item.label" class="rounded-md border border-gray-200 bg-white p-4 dark:border-[#273044] dark:bg-[#11141b]">
                 <p class="text-xs uppercase tracking-wider text-gray-500">{{ item.label }}</p>
                 <p class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{{ item.value }}</p>
@@ -269,7 +401,7 @@ const confirmDeleteRule = () => {
                     <option value="">All courses</option>
                     <option v-for="course in courses" :key="course.id" :value="course.id">{{ courseLabel(course) }}</option>
                 </select>
-                <select v-model="filter.student_id" class="h-9 rounded-md border-gray-200 bg-white text-sm text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-gray-300">
+                <select v-if="!isLearner" v-model="filter.student_id" class="h-9 rounded-md border-gray-200 bg-white text-sm text-gray-700 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-gray-300">
                     <option value="">All learners</option>
                     <option v-for="student in students" :key="student.id" :value="student.id">{{ student.admission_number }} - {{ student.name }}</option>
                 </select>
@@ -277,6 +409,7 @@ const confirmDeleteRule = () => {
                     <option value="">All statuses</option>
                     <option value="issued">Issued</option>
                     <option value="downloaded">Downloaded</option>
+                    <option value="checked_in">Checked in</option>
                 </select>
             </div>
         </div>
@@ -292,6 +425,16 @@ const confirmDeleteRule = () => {
                     Learner Tickets
                 </button>
                 <button
+                    v-if="canCheckIn"
+                    type="button"
+                    class="rounded-t-md px-4 py-2 text-sm font-semibold transition"
+                    :class="activeTab === 'checkin' ? 'bg-white text-violet-700 shadow-sm dark:bg-[#11141b] dark:text-violet-300' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'"
+                    @click="activeTab = 'checkin'; focusScanner()"
+                >
+                    Check-in
+                </button>
+                <button
+                    v-if="canManageRules"
                     type="button"
                     class="rounded-t-md px-4 py-2 text-sm font-semibold transition"
                     :class="activeTab === 'rules' ? 'bg-white text-violet-700 shadow-sm dark:bg-[#11141b] dark:text-violet-300' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'"
@@ -349,7 +492,7 @@ const confirmDeleteRule = () => {
 
             <div v-else class="flex min-h-[180px] flex-col items-center justify-center px-6 text-center">
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No learner tickets found</p>
-                <button v-if="canAdd" class="mt-4 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openTicketModal">+ Issue Ticket</button>
+                <button v-if="canAdd" class="mt-4 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openTicketModal">+ {{ isLearner ? 'Generate Ticket' : 'Issue Ticket' }}</button>
             </div>
 
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]">
@@ -357,7 +500,86 @@ const confirmDeleteRule = () => {
             </div>
         </div>
 
-        <div v-if="activeTab === 'rules'" class="mt-4 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-[#273044] dark:bg-[#11141b]">
+        <div v-if="activeTab === 'checkin' && canCheckIn" class="mt-4 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-[#273044] dark:bg-[#11141b]">
+            <div class="border-b border-gray-200 px-5 py-4 dark:border-[#232837]">
+                <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Scanner</p>
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Ticket Check-in</h2>
+            </div>
+
+            <div class="grid gap-4 p-5 lg:grid-cols-[1fr_420px]">
+                <form class="space-y-3" @submit.prevent="checkInTicket(false)">
+                    <div class="overflow-hidden rounded-md border border-gray-200 bg-gray-950 dark:border-[#2a3040]">
+                        <video
+                            ref="cameraVideo"
+                            class="aspect-video w-full bg-gray-950 object-cover"
+                            muted
+                            playsinline
+                        />
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            v-if="!camera.active"
+                            class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
+                            type="button"
+                            :disabled="camera.starting"
+                            @click="startCamera"
+                        >
+                            {{ camera.starting ? 'Starting...' : 'Start camera' }}
+                        </button>
+                        <button
+                            v-else
+                            class="rounded-md border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-300"
+                            type="button"
+                            @click="stopCamera"
+                        >
+                            Stop camera
+                        </button>
+                    </div>
+
+                    <p v-if="camera.error" class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                        {{ camera.error }}
+                    </p>
+
+                    <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Scan ticket QR</label>
+                    <input
+                        ref="scanInput"
+                        v-model="scan.value"
+                        class="h-14 w-full rounded-md border-gray-200 bg-white text-lg font-semibold text-gray-900 focus:border-violet-500 focus:ring-violet-500 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white"
+                        placeholder="Scan or paste ticket code"
+                        autocomplete="off"
+                    >
+                    <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" type="submit" :disabled="scan.processing">
+                        {{ scan.processing ? 'Checking...' : 'Check in' }}
+                    </button>
+
+                    <div v-if="scan.result" class="rounded-md border p-4" :class="scan.result.ok ? (scan.result.duplicate ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200' : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200') : 'border-red-300 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'">
+                        <p class="text-lg font-bold">{{ scan.result.message }}</p>
+                        <div v-if="scan.result.ticket" class="mt-2 text-sm">
+                            <p>{{ scan.result.ticket.student?.admission_number }} - {{ scan.result.ticket.student?.name }}</p>
+                            <p>{{ scan.result.ticket.target_label }}</p>
+                            <p class="font-mono text-xs">{{ scan.result.ticket.ticket_number }}</p>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="rounded-md border border-gray-200 dark:border-[#2a3040]">
+                    <div class="border-b border-gray-200 px-4 py-3 dark:border-[#2a3040]">
+                        <p class="text-sm font-semibold text-gray-900 dark:text-white">Recent Check-ins</p>
+                    </div>
+                    <div class="max-h-[420px] divide-y divide-gray-100 overflow-auto dark:divide-[#1a1f2b]">
+                        <div v-for="item in recentCheckins" :key="`${item.id}-${item.checked_in_at}`" class="px-4 py-3 text-sm">
+                            <p class="font-semibold text-gray-900 dark:text-white">{{ item.student?.admission_number }} - {{ item.student?.name }}</p>
+                            <p class="text-xs text-gray-500">{{ item.target_label }}</p>
+                            <p class="mt-1 font-mono text-[11px] text-gray-500">{{ item.ticket_number }} | {{ item.checked_in_at }}</p>
+                        </div>
+                        <p v-if="!recentCheckins.length" class="px-4 py-6 text-center text-sm text-gray-500">No check-ins yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="activeTab === 'rules' && canManageRules" class="mt-4 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-[#273044] dark:bg-[#11141b]">
             <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-[#232837]">
                 <div>
                     <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Rules</p>
@@ -408,7 +630,7 @@ const confirmDeleteRule = () => {
 
             <div v-else class="flex min-h-[180px] flex-col items-center justify-center px-6 text-center">
                 <p class="font-semibold text-gray-700 dark:text-gray-300">No ticket rules found</p>
-                <button v-if="canAdd" class="mt-4 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openRuleModal">+ Add Rule</button>
+                <button v-if="canManageRules" class="mt-4 rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400" type="button" @click="openRuleModal">+ Add Rule</button>
             </div>
 
             <div class="border-t border-gray-200 p-4 dark:border-[#232837]">
@@ -416,7 +638,7 @@ const confirmDeleteRule = () => {
             </div>
         </div>
 
-        <DialogModal :show="showingRuleModal" max-width="2xl" @close="closeRuleModal">
+        <DialogModal :show="showingRuleModal && canManageRules" max-width="2xl" @close="closeRuleModal">
             <template #title>{{ ruleForm.id ? 'Edit ticket rule' : 'Add ticket rule' }}</template>
             <template #content>
                 <form id="ticket-rule-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="saveRule">
@@ -501,10 +723,10 @@ const confirmDeleteRule = () => {
         </DialogModal>
 
         <DialogModal :show="showingTicketModal" max-width="2xl" @close="closeTicketModal">
-            <template #title>Issue lesson ticket</template>
+            <template #title>{{ isLearner ? 'Generate lesson ticket' : 'Issue lesson ticket' }}</template>
             <template #content>
                 <form id="lesson-ticket-form" class="grid gap-4 text-gray-700 md:grid-cols-2 dark:text-gray-300" @submit.prevent="issueTicket">
-                    <div class="md:col-span-2">
+                    <div v-if="!isLearner" class="md:col-span-2">
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Learner</label>
                         <div class="relative mt-1">
                             <button type="button" class="flex w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-900 dark:border-[#2a3040] dark:bg-[#0c0f16] dark:text-white" @click="toggleStudentSelect">
@@ -523,6 +745,10 @@ const confirmDeleteRule = () => {
                             </div>
                         </div>
                         <p v-if="ticketForm.errors.student_id" class="mt-1 text-xs text-red-400">{{ ticketForm.errors.student_id }}</p>
+                    </div>
+                    <div v-else class="md:col-span-2 rounded-md border border-gray-200 p-3 text-sm dark:border-[#2a3040]">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Learner</p>
+                        <p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ selectedStudentLabel }}</p>
                     </div>
                     <div class="md:col-span-2">
                         <label class="text-xs font-semibold uppercase tracking-wider text-gray-500">Ticket target</label>
@@ -559,7 +785,7 @@ const confirmDeleteRule = () => {
             <template #footer>
                 <button class="mr-2 rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:text-gray-900 dark:border-[#2a3040] dark:text-gray-300 dark:hover:text-white" type="button" @click="closeTicketModal">Cancel</button>
                 <button class="rounded-md bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50" form="lesson-ticket-form" type="submit" :disabled="ticketForm.processing">
-                    {{ ticketForm.processing ? 'Issuing...' : 'Issue ticket' }}
+                    {{ ticketForm.processing ? 'Saving...' : (isLearner ? 'Generate ticket' : 'Issue ticket') }}
                 </button>
             </template>
         </DialogModal>
