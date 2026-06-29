@@ -1,8 +1,6 @@
 <?php
 
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 use App\Http\Controllers\AcademicSettingsController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
@@ -19,19 +17,16 @@ use App\Http\Controllers\LecturerManagementController;
 use App\Http\Controllers\LessonTicketController;
 use App\Http\Controllers\OrganisationSettingsController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\ScoreLevelController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnitManagementController;
 use App\Models\Course;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+Route::get('/', [PublicPageController::class, 'home'])->name('home');
+Route::get('/about', [PublicPageController::class, 'about'])->name('about');
+Route::get('/courses', [PublicPageController::class, 'courses'])->name('courses');
+Route::get('/contact', [PublicPageController::class, 'contact'])->name('contact');
 
 Route::middleware([
     'auth:sanctum',
