@@ -48,6 +48,11 @@ class Examination extends Model
         return $this->belongsTo(AcademicYear::class);
     }
 
+    public function academic_year(): BelongsTo
+    {
+        return $this->academicYear();
+    }
+
     public function semester(): BelongsTo
     {
         return $this->belongsTo(Semester::class);

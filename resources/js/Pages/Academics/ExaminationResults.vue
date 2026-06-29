@@ -1,10 +1,11 @@
 <script setup>
 import { computed, reactive, watch } from 'vue';
-import { router, useForm } from '@inertiajs/vue3';
+import { router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Pagination from '@/Components/Admin/Pagination.vue';
 
 const props = defineProps({
+    isLearner: Boolean,
     filters: Object,
     departments: Array,
     courses: Array,
@@ -13,8 +14,11 @@ const props = defineProps({
     examinations: Array,
     selectedExamination: Object,
     entries: Object,
+    learnerResults: Object,
 });
 
+const page = usePage();
+const organisation = computed(() => page.props.organisation || {});
 const filter = reactive({
     department_id: props.filters.department_id || '',
     course_id: props.filters.course_id || '',
@@ -52,6 +56,7 @@ const gradeOptions = computed(() => {
 });
 const usesGrade = computed(() => ['grade_only', 'score_levels_with_grades'].includes(props.selectedExamination?.effective_grading_mode));
 const dirtyResults = computed(() => resultForm.results.filter((row) => row.dirty && canEditRow(row)));
+const pageTitle = computed(() => props.isLearner ? 'My Results' : 'Examination Results');
 
 const applyFilters = () => {
     router.get(route('academics.results.index'), filter, { preserveScroll: true, replace: true });
@@ -167,10 +172,147 @@ const saveResults = () => {
         onFinish: () => resultForm.transform((data) => data),
     });
 };
+
+const escapeHtml = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+const formatDate = (value) => {
+    if (!value) return '';
+
+    return new Date(value).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+    });
+};
+
+const printResult = (result) => {
+    const printWindow = window.open('', '_blank', 'width=820,height=900');
+
+    if (!printWindow) return;
+
+    const org = organisation.value;
+    const exam = result.examination || {};
+
+    printWindow.document.write(`
+        <!doctype html>
+        <html>
+            <head>
+                <title>Result ${escapeHtml(exam.code || result.id)}</title>
+                <style>
+                    * { box-sizing: border-box; }
+                    @page { size: 80mm auto; margin: 3mm; }
+                    body { margin: 0; background: #fff; color: #000; font-family: "Courier New", Courier, monospace; font-size: 11px; }
+                    .receipt { width: 72mm; margin: 0 auto; }
+                    .header, .title, .thanks { text-align: center; }
+                    .org-name { font-size: 14px; font-weight: 700; text-transform: uppercase; }
+                    .org-meta { margin-top: 3px; font-size: 10px; line-height: 1.35; }
+                    .line { border-top: 1px dashed #000; margin: 7px 0; }
+                    .title { font-size: 13px; font-weight: 700; text-transform: uppercase; }
+                    .row { display: flex; justify-content: space-between; gap: 8px; line-height: 1.45; }
+                    .row span:first-child { white-space: nowrap; }
+                    .row span:last-child { text-align: right; overflow-wrap: anywhere; }
+                    .total-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 700; }
+                    .block { line-height: 1.45; }
+                    @media print { .receipt { width: 72mm; margin: 0; } }
+                </style>
+            </head>
+            <body>
+                <main class="receipt">
+                    <section class="header">
+                        <h1 class="org-name">${escapeHtml(org.name || 'Organisation')}</h1>
+                        <p class="org-meta">${escapeHtml(org.location || '')}<br>Tel: ${escapeHtml(org.primary_contact || '')}<br>Email: ${escapeHtml(org.official_email || '')}</p>
+                    </section>
+                    <div class="line"></div>
+                    <div class="title">Result Slip</div>
+                    <div class="line"></div>
+                    <section class="block">
+                        <p><strong>Examination:</strong> ${escapeHtml(`${exam.code ? `${exam.code} - ` : ''}${exam.name || ''}`)}</p>
+                        <p><strong>Target:</strong> ${escapeHtml(result.target_label || '')}</p>
+                        <p><strong>Class:</strong> ${escapeHtml(result.class_label || '')}</p>
+                        <p><strong>Term:</strong> ${escapeHtml([exam.academic_year?.name, exam.semester?.name].filter(Boolean).join(' / '))}</p>
+                    </section>
+                    <div class="line"></div>
+                    <section>
+                        <div class="total-row"><span>Score</span><span>${escapeHtml(result.score ?? '-')} / ${escapeHtml(exam.max_score ?? 100)}</span></div>
+                        <div class="row"><span>Grade</span><span>${escapeHtml(result.grade || '-')}</span></div>
+                        <div class="row"><span>Comment</span><span>${escapeHtml(result.comment || '-')}</span></div>
+                        <div class="row"><span>Recorded</span><span>${escapeHtml(formatDate(result.recorded_at))}</span></div>
+                    </section>
+                    <div class="line"></div>
+                    <p class="thanks">Downloaded result record</p>
+                    <p class="org-meta">Printed: ${escapeHtml(new Date().toLocaleString())}</p>
+                </main>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => printWindow.print(), 250);
+};
 </script>
 
 <template>
-    <AppLayout title="Examination Results">
+    <AppLayout :title="pageTitle">
+        <template v-if="isLearner">
+            <div class="rounded-md border border-gray-200 bg-white p-4 dark:border-[#273044] dark:bg-[#11141b]">
+                <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Recorded Results</p>
+                        <h1 class="text-xl font-bold text-gray-900 dark:text-white">My Results</h1>
+                    </div>
+                    <div class="flex gap-2">
+                        <input v-model="filter.result_search" class="h-9 rounded-md border-gray-200 bg-white text-sm dark:border-[#2a3040] dark:bg-[#0c0f16]" placeholder="Search result">
+                        <button class="h-9 rounded-md border border-gray-200 px-4 text-sm font-semibold text-gray-600 transition hover:border-violet-400 hover:text-violet-700 dark:border-[#2a3040] dark:text-gray-300" type="button" @click="applyResultFilters">Search</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-[#273044] dark:bg-[#11141b]">
+                <table v-if="learnerResults?.data?.length" class="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#232837]">
+                    <thead class="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-[#171b25]">
+                        <tr>
+                            <th class="px-5 py-3">Examination</th>
+                            <th class="px-5 py-3">Target</th>
+                            <th class="px-5 py-3">Class</th>
+                            <th class="px-5 py-3">Score</th>
+                            <th class="px-5 py-3">Grade</th>
+                            <th class="px-5 py-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-[#1a1f2b]">
+                        <tr v-for="result in learnerResults.data" :key="result.id">
+                            <td class="px-5 py-4">
+                                <p class="font-semibold text-gray-900 dark:text-white">{{ result.examination?.code }} - {{ result.examination?.name }}</p>
+                                <p class="text-xs text-gray-500">{{ formatDate(result.recorded_at) }}</p>
+                            </td>
+                            <td class="px-5 py-4 text-gray-600 dark:text-gray-300">{{ result.target_label || '-' }}</td>
+                            <td class="px-5 py-4 text-gray-500">{{ result.class_label || '-' }}</td>
+                            <td class="px-5 py-4 font-semibold text-gray-900 dark:text-white">{{ result.score ?? '-' }} / {{ result.examination?.max_score || 100 }}</td>
+                            <td class="px-5 py-4">
+                                <span class="rounded-md bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-500">{{ result.grade || '-' }}</span>
+                            </td>
+                            <td class="px-5 py-4 text-right">
+                                <button class="rounded-md border border-violet-500/30 px-2.5 py-1.5 text-xs text-violet-600 transition hover:border-violet-400 dark:text-violet-300" type="button" @click="printResult(result)">Download</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div v-else class="flex min-h-[240px] items-center justify-center px-6 text-center text-sm text-gray-500">
+                    No recorded results are available for your account yet.
+                </div>
+                <div v-if="learnerResults?.links" class="border-t border-gray-200 p-4 dark:border-[#232837]">
+                    <Pagination :links="learnerResults.links" />
+                </div>
+            </div>
+        </template>
+
+        <template v-else>
         <div class="rounded-md border border-gray-200 bg-white p-4 dark:border-[#273044] dark:bg-[#11141b]">
             <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <div>
@@ -289,5 +431,6 @@ const saveResults = () => {
                 Select department, course, examination, and class to load learners.
             </div>
         </div>
+        </template>
     </AppLayout>
 </template>

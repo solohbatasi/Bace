@@ -7,6 +7,7 @@ use App\Models\Course;
 use App\Models\Department;
 use App\Models\Enrollment;
 use App\Models\Examination;
+use App\Models\ExaminationResult;
 use App\Models\ScoreLevel;
 use App\Models\SemesterRegistration;
 use App\Models\Unit;
@@ -21,9 +22,48 @@ class ExaminationResultController extends Controller
 {
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->hasAnyPermission('examinations.edit|examinations.manage|classes.manage'), 403);
+        abort_unless($request->user()->hasAnyPermission('results.view|examinations.edit|examinations.manage|classes.manage'), 403);
 
         $filters = $request->only(['department_id', 'course_id', 'subcourse_id', 'unit_id', 'examination_id', 'class_id', 'result_search', 'result_status']);
+        $user = $request->user()->loadMissing('student');
+        $isLearner = (bool) $user->student && ! $user->hasAnyPermission('examinations.edit|examinations.manage|classes.manage');
+
+        if ($isLearner) {
+            return Inertia::render('Academics/ExaminationResults', [
+                'isLearner' => true,
+                'filters' => $filters,
+                'departments' => [],
+                'courses' => [],
+                'units' => [],
+                'classes' => [],
+                'examinations' => [],
+                'selectedExamination' => null,
+                'entries' => null,
+                'learnerResults' => ExaminationResult::query()
+                    ->with([
+                        'examination:id,course_id,subcourse_id,unit_id,academic_year_id,semester_id,code,name,max_score',
+                        'examination.course:id,code,name',
+                        'examination.subcourse:id,parent_course_id,code,name',
+                        'examination.unit:id,course_id,code,name',
+                        'examination.academicYear:id,name',
+                        'examination.semester:id,name',
+                        'registration:id,class_id',
+                        'registration.class:id,code,name',
+                        'enrollment:id,class_id',
+                        'enrollment.class:id,code,name',
+                    ])
+                    ->where('student_id', $user->student->id)
+                    ->whereNotNull('recorded_at')
+                    ->when($filters['result_search'] ?? null, fn ($query, $search) => $query->whereHas('examination', fn ($query) => $query
+                        ->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")))
+                    ->latest('recorded_at')
+                    ->paginate(20)
+                    ->withQueryString()
+                    ->through(fn (ExaminationResult $result) => $this->learnerResultPayload($result)),
+            ]);
+        }
+
         $selectedExamination = null;
         $entries = null;
 
@@ -54,6 +94,7 @@ class ExaminationResultController extends Controller
         }
 
         return Inertia::render('Academics/ExaminationResults', [
+            'isLearner' => false,
             'filters' => $filters,
             'departments' => Department::orderBy('name')->get(['id', 'code', 'name']),
             'courses' => Course::with(['subcourses' => fn ($query) => $query->where('is_active', true)->orderBy('name')])
@@ -67,6 +108,7 @@ class ExaminationResultController extends Controller
                 ->get(['id', 'course_id', 'subcourse_id', 'unit_id', 'code', 'name', 'scope_type', 'academic_year_id', 'semester_id', 'max_score']),
             'selectedExamination' => $selectedExamination,
             'entries' => $entries,
+            'learnerResults' => null,
         ]);
     }
 
@@ -245,6 +287,24 @@ class ExaminationResultController extends Controller
             'score' => $result?->score,
             'grade' => $result?->grade,
             'comment' => $result?->comment,
+        ];
+    }
+
+    private function learnerResultPayload(ExaminationResult $result): array
+    {
+        $examination = $result->examination;
+        $target = $examination?->unit ?: ($examination?->subcourse ?: $examination?->course);
+        $class = $result->enrollment?->class ?: $result->registration?->class;
+
+        return [
+            'id' => $result->id,
+            'examination' => $examination,
+            'target_label' => trim(($target?->code ?: '').' - '.($target?->name ?: ''), ' -'),
+            'class_label' => trim(($class?->code ?: '').' - '.($class?->name ?: ''), ' -'),
+            'score' => $result->score,
+            'grade' => $result->grade,
+            'comment' => $result->comment,
+            'recorded_at' => $result->recorded_at,
         ];
     }
 
