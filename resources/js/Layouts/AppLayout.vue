@@ -18,6 +18,7 @@ const page = usePage();
 const sidebarOpen = ref(localStorage.getItem('sidebar') !== 'closed');
 const organisation = computed(() => page.props.organisation || {});
 const organisationInitials = computed(() => (organisation.value.short_name || organisation.value.name || 'ORG').substring(0, 3).toUpperCase());
+const organisationFooterName = computed(() => organisation.value.name || organisation.value.short_name || 'Organisation');
 const userPermissions = computed(() => page.props.auth?.permissions || []);
 const can = (permission) => permission
     .split('|')
@@ -188,7 +189,7 @@ const logout = () => router.post(route('logout'));
                 </main>
 
                 <footer class="mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-1 border-t border-gray-200 px-4 py-5 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-[#232837]">
-                    <span>ISP SaaS v1.0.0</span>
+                    <span>{{ organisationFooterName }} v1.0.0</span>
                     <span>Maintained by bAtasi</span>
                 </footer>
             </div>

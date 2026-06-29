@@ -1,5 +1,6 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import ThemeToggle from '@/Components/ThemeToggle.vue';
 
 defineProps({
@@ -14,6 +15,10 @@ defineProps({
         required: true,
     },
 });
+
+const page = usePage();
+const organisation = computed(() => page.props.organisation || {});
+const organisationName = computed(() => organisation.value.name || organisation.value.short_name || 'Organisation');
 </script>
 
 <template>
@@ -28,7 +33,7 @@ defineProps({
                             <path stroke-linecap="round" stroke-linejoin="round" d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z" />
                         </svg>
                     </div>
-                    <span class="text-sm font-bold text-gray-900 dark:text-white">ISP SaaS</span>
+                    <span class="text-sm font-bold text-gray-900 dark:text-white">{{ organisationName }}</span>
                 </div>
 
                 <nav v-if="canLogin" class="flex items-center gap-2">
@@ -56,7 +61,7 @@ defineProps({
             <section>
                 <div class="mb-5 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                     <span class="size-2 rounded-full bg-emerald-400" />
-                    Built for ISP operations
+                    Built for {{ organisationName }}
                 </div>
 
                 <h1 class="max-w-3xl text-4xl font-bold tracking-tight text-gray-950 sm:text-5xl dark:text-white">
@@ -136,7 +141,7 @@ defineProps({
         </main>
 
         <footer class="mx-auto flex max-w-[1180px] flex-col gap-1 border-t border-gray-200 px-4 py-5 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-[#232837]">
-            <span>ISP SaaS v1.0.0</span>
+            <span>{{ organisationName }} v1.0.0</span>
             <span>Maintained by bAtasi</span>
         </footer>
     </div>

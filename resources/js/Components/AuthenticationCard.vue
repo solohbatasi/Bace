@@ -1,6 +1,11 @@
 <script setup>
-import { Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
 import ThemeToggle from '@/Components/ThemeToggle.vue';
+
+const page = usePage();
+const organisation = computed(() => page.props.organisation || {});
+const organisationName = computed(() => organisation.value.name || organisation.value.short_name || 'Organisation');
 </script>
 
 <template>
@@ -13,7 +18,7 @@ import ThemeToggle from '@/Components/ThemeToggle.vue';
                             <path stroke-linecap="round" stroke-linejoin="round" d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z" />
                         </svg>
                     </div>
-                    <span class="text-sm font-bold text-gray-900 dark:text-white">ISP SaaS</span>
+                    <span class="text-sm font-bold text-gray-900 dark:text-white">{{ organisationName }}</span>
                 </Link>
 
                 <ThemeToggle />
@@ -26,7 +31,7 @@ import ThemeToggle from '@/Components/ThemeToggle.vue';
                     Secure access
                 </div>
                 <h1 class="max-w-lg text-4xl font-bold tracking-tight text-gray-950 dark:text-white">
-                    Sign in to manage the ISP SaaS control plane.
+                    Sign in to manage the {{ organisationName }} control plane.
                 </h1>
                 <p class="mt-5 max-w-lg text-sm leading-6 text-gray-600 dark:text-gray-400">
                     Laravel security, Vue interactions, Sanctum API access, and session-aware administration in one consistent workspace.
@@ -68,7 +73,7 @@ import ThemeToggle from '@/Components/ThemeToggle.vue';
         </main>
 
         <footer class="mx-auto flex max-w-[1180px] flex-col gap-1 border-t border-gray-200 px-4 py-5 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-[#232837]">
-            <span>ISP SaaS v1.0.0</span>
+            <span>{{ organisationName }} v1.0.0</span>
             <span>Maintained by bAtasi</span>
         </footer>
     </div>
