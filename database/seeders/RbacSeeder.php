@@ -131,6 +131,11 @@ class RbacSeeder extends Seeder
                 'payments.add',
                 'payments.edit',
                 'payments.delete',
+                'tickets.view',
+                'tickets.add',
+                'tickets.edit',
+                'tickets.delete',
+                'tickets.manage',
                 'finance.view',
                 'finance.manage',
             ])->pluck('id')

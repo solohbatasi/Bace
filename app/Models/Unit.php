@@ -49,4 +49,14 @@ class Unit extends Model
     {
         return $this->hasMany(Examination::class);
     }
+
+    public function lessonTicketRules(): HasMany
+    {
+        return $this->hasMany(LessonTicketRule::class);
+    }
+
+    public function lessonTickets(): HasMany
+    {
+        return $this->hasMany(LessonTicket::class);
+    }
 }
