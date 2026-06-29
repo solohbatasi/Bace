@@ -53,6 +53,16 @@ class Course extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    public function semesterRegistrations(): HasMany
+    {
+        return $this->hasMany(SemesterRegistration::class);
+    }
+
     public function lessonTicketRules(): HasMany
     {
         return $this->hasMany(LessonTicketRule::class);

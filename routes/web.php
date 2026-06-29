@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AssignmentManagementController;
 use App\Http\Controllers\CourseManagementController;
 use App\Http\Controllers\DepartmentManagementController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentManagementController;
 use App\Http\Controllers\ExaminationManagementController;
 use App\Http\Controllers\ExaminationResultController;
@@ -37,9 +38,7 @@ Route::middleware([
     config('jetstream.auth_session'),
     'verified',
 ])->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('users', UserController::class)->except(['create', 'edit', 'show']);
